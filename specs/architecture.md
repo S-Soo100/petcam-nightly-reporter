@@ -139,6 +139,60 @@ claude -p "밤새 부분 리포트 merge해서 reports/nightly/2026-06-17.md 아
 
 ---
 
+## 10.1 indexer 입력 = terra `motion_clips` (2026-06-18 확정 + 실측)
+
+> 펌웨어 계약 v1(`petcam-lab/docs/handoff-prompts/camera-firmware-clip-contract.md` + `…-reply.md`) + DB 실측으로 확정. **다음 세션 Step 1~3 착수 계획서.**
+> **clip 입력 = terra `motion_clips`** (petcam-lab `camera_clips` 아님 — 그건 레거시 capture worker 데이터). motion_clips는 **같은 Supabase 프로젝트에 있어 접근 권한 이미 있음**(실측: 21건, 어젯밤 06-18 새벽 클립 들어옴 — terra 회신의 "별개 프로젝트"는 부정확). 권한 조율 불필요.
+
+### 입력 스키마 (실측 — 현 Supabase `public.motion_clips`)
+
+| 컬럼 | 타입 | indexer 용도 |
+|---|---|---|
+| `id` (uuid) | clip_id |
+| `camera_id` (uuid) | 카메라 그룹핑 (멀티캠 sub-chunk §4) |
+| `owner_id` (uuid) | 유저 |
+| `enclosure_id` (uuid, null 가능) | 사육장 |
+| **`started_at`** (timestamptz) | ⭐ **시간 윈도우 키** (펌웨어 SNTP UTC 녹화시각) |
+| `duration_sec` (double) | clip 길이 |
+| **`r2_key`** (text NOT NULL) | R2 위치: `terra-clips/clips/{camera_id}/{YYYYMMDD-HHMMSS}_{clip_id}.mp4` |
+| `thumbnail_key` (text) | 썸네일 |
+| `motion_score` (double) | 모션 강도 0~1 (`>0`=모션). camera_clips의 `has_motion`(bool) 대체 |
+| `width/height/fps/codec/file_size/container` | 디코딩 메타 |
+| `created_at` (timestamptz) | 등록시각(서버 now() — 윈도우엔 **안 씀**) |
+
+### indexer 쿼리 (B방식 — `started_at` 시간 인덱스)
+
+```python
+# reporter/indexer.py
+def list_clips_for_window(sb, start: datetime, end: datetime) -> list[ClipMeta]:
+    """terra motion_clips 에서 [start, end) 윈도우 clip 조회. started_at = 녹화시각(SNTP UTC)."""
+    rows = (
+        sb.table("motion_clips")
+        .select("id, camera_id, owner_id, started_at, duration_sec, r2_key, motion_score")
+        .gte("started_at", start.isoformat())
+        .lt("started_at", end.isoformat())
+        .order("started_at")
+        .execute()
+        .data
+    )
+    return [ClipMeta(**r) for r in rows]
+```
+
+- **`r2_key IS NOT NULL` 필터 불필요** — terra는 DB-last(업로드 성공 후 등록, 계약 §3)라 row 존재 = R2 영상 존재. petcam-lab camera_clips의 유령 row 우려가 여기선 없음.
+- R2 GET = `r2_key` 그대로 (공유 버킷 `petcam-clips`, prefix `terra-clips/`). R2 creds 는 petcam-lab `backend/r2_uploader.py` 패턴 재사용.
+
+### Step 1~3 완료조건 (§10 표의 motion_clips 구체화)
+
+| Step | 완료조건 (구체) |
+|---|---|
+| 1 | `pyproject` + `config.py`(Supabase URL/key + R2 creds, `.env`) → `uv run python -m reporter.indexer` 임포트 OK |
+| 2 | `list_clips_for_window(어젯밤 22:00~06:00 KST→UTC)` → **실데이터 ClipMeta 반환**(현재 21건 중 해당 윈도우). 시간 경계·정렬 검증 |
+| 3 | `motion_scan`: `ClipMeta.r2_key` 로 mp4 GET → 1~2fps `absdiff` → event boundary list. 클립 1개 PoC |
+
+> ⚠️ **두 종류의 "motion" 구분**: terra `motion_score`(clip 자체가 모션 트리거됐다는 펌웨어 신호 — 전부 `>0`) vs nightly `motion_scan`(clip *안에서* event boundary를 1~2fps absdiff로 다시 찾는 것). 별개 레이어 — indexer는 `motion_score`로 거르지 않고(이미 다 모션) 가져온 뒤 motion_scan으로 event 분할.
+
+---
+
 ## 11. 스코프
 
 **In**: 야간 분할 배치 · event bundle · Claude Code 리포트 · lab 레시피 소비 · Gate prelabel 재활용(선택) · mac-mini 로컬 운영.

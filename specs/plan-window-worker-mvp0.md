@@ -477,6 +477,13 @@ git commit -m "feat: claude -p 프레임 분류 (v4.0 프롬프트 박제 + 이�
 
 ## Task 4 (W4): 윈도우 통합 + 활동 집계 + Slack 요약
 
+> ⚠️ **W3 비용 발견으로 재설계 (2026-07-06):** 원안(전량 claude 분류)은 clip당 ~12만 토큰이라 밤배치 시 구독 한도 초과. **W4a(DB 뼈대·claude 0회) + W4b(claude 샘플)로 분리.**
+> - **W4a ✅ (완료):** `summarize_activity(clips)` — 활동량(clip 수·duration)·활동시간대(started_at→KST 분포)를 라벨 없이 DB 로 산출. `worker.py` 뼈대(조회→집계→slack). 실측: 21-23시 윈도우 47clip/24.3분/22시 집중, **0 비용**.
+> - **W4b (다음):** `motion_score` 상위 N개 clip만 `classify_clip` → `summarize_behaviors`(탈피·음수 태깅) → slack 통합. N 은 밤 clip 수 실측 후 결정.
+> - **한도 전략:** W5 launchd 를 22/00/02/04시 분산 → 각 배치가 직전 2h 만 처리 + 5h rolling 부분회복 + 새벽 미사용 독점(메모리 `claude-subscription-quota-shared`). 정 안되면 전용 계정.
+>
+> 아래 원안 스텝(Step 1~7)은 **W4b 참조용**. 실제 W4a 는 위 구조로 구현됨(summarize 는 action 무관 activity 집계, worker 는 claude 없는 뼈대).
+
 **Files:**
 - Create: `reporter/summarize.py`, `reporter/worker.py`, `tests/test_summarize.py`
 

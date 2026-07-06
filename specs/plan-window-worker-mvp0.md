@@ -618,14 +618,14 @@ git commit -m "feat: 윈도우 워커 통합 — 활동량/시간대 집계 + sl
 **Files:**
 - Create: `install-launchd.sh` (mac-runner 복붙 + 수정), `README.md`
 
-- [ ] **Step 1: `install-launchd.sh` — mac-runner 복붙 + 타겟/PATH 수정**
+- [x] **Step 1: `install-launchd.sh` — mac-runner 복붙 + 타겟/PATH 수정**
 
 mac-runner `install-launchd.sh` 복사 후:
 - 실행 타겟: `smoke.py` → `-m reporter.worker`
 - **PATH 이중 확보**(메모리 `cron-launchd-keychain` PATH 함정): `uv`(`~/.local/bin`)와 `claude`(brew `/opt/homebrew/bin`)가 다른 bin일 수 있음 → plist `PATH`에 `command -v uv`/`command -v claude` 둘 다 반영.
 - 주기: 스모크·검증은 `StartInterval`(N초). **야간 한정 운영 전환 시** `StartCalendarInterval` 배열(00·02·04·06시)로 — 사용자와 야간 스케줄 확정 후.
 
-- [ ] **Step 2: `README.md` — 맥미니 핸드오프 절차**
+- [x] **Step 2: `README.md` — 맥미니 핸드오프 절차**
 
 mac-runner Phase 0 절차 계승:
 ```
@@ -640,7 +640,7 @@ Run (맥미니): `./install-launchd.sh && uv run python -m reporter.worker`
 Expected: Slack 활동 요약 도착.
 > ⚠️ **claude 구독 한도 공유**(메모리 `claude-subscription-quota-shared`): 맥미니 워커가 본인 claude 작업과 같은 구독 한도 사용. W4 실측 데이터로 야간 주기·분리 결정 후 상시 가동.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add install-launchd.sh README.md

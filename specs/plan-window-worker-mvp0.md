@@ -267,7 +267,7 @@ git commit -m "feat: 윈도우 시간경계 + motion_clips indexer + clip 개수
 **Files:**
 - Create: `reporter/r2.py`, `reporter/frames.py`
 
-- [ ] **Step 1: `reporter/r2.py` — R2 client + 다운로드 (lab r2_uploader 패턴 이식)**
+- [x] **Step 1: `reporter/r2.py` — R2 client + 다운로드 (lab r2_uploader 패턴 이식)**
 
 petcam-lab `backend/r2_uploader.py`의 `get_r2_client()` 패턴 복사(path-style 강제 — R2 SSL 이슈 회피). 다운로드만 필요.
 
@@ -300,7 +300,7 @@ def download_clip(r2_key: str, dest: Path) -> Path:
     return dest
 ```
 
-- [ ] **Step 2: `reporter/frames.py` — 적응형 프레임 추출 (lab `_extract_frames_clip.py` 이식)**
+- [x] **Step 2: `reporter/frames.py` — 적응형 프레임 추출 (lab `_extract_frames_clip.py` 이식)**
 
 lab의 `extract_adaptive` / `_adaptive_n` / `_enforce_no_upscale` 로직을 CLI 벗기고 함수만 이식. 시그니처는 lab과 동치.
 
@@ -349,7 +349,7 @@ def _write_no_upscale(frame, path: Path) -> None:
 
 > ⚠️ 이식 검증: lab 원본과 프레임 위치 로직이 일치하는지 육안 대조(구간중앙·clamp·no-upscale 3요소). 원본이 갱신되면 여기도 sync — `LAB_PROMPT_VERSION`처럼 버전 주석 유지.
 
-- [ ] **Step 3: 수동 검증 — clip 1개 다운 + 추출**
+- [x] **Step 3: 수동 검증 — clip 1개 다운 + 추출**
 
 ```python
 from pathlib import Path
@@ -368,7 +368,7 @@ print(f"clip {c.id[:8]} dur={c.duration_sec}s → {len(imgs)} frames: {[p.name f
 
 Expected: mp4 다운로드 성공 + 6~20장 jpg. 육안으로 프레임이 게코를 담고 있나 확인.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add reporter/r2.py reporter/frames.py

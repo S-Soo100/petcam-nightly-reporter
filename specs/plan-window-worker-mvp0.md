@@ -382,7 +382,7 @@ git commit -m "feat: R2 clip 다운로드 + 적응형 프레임 추출 (lab v4.0
 **Files:**
 - Create: `reporter/prompts/system.v4.0.md`, `reporter/classify.py`
 
-- [ ] **Step 1: v4.0 프롬프트 박제 (손조립 금지 — production 함수 출력 캡처)**
+- [x] **Step 1: v4.0 프롬프트 박제 (손조립 금지 — production 함수 출력 캡처)**
 
 메모리 `run-sot-function-reconstruct`: 프롬프트는 SOT 함수를 직접 실행해 박제. ⚠️ species는 **언더스코어** `crested_gecko`(하이픈 아님 — 파일 못 찾음 함정).
 
@@ -394,7 +394,7 @@ cd ~/petcam-lab && PYTHONPATH=. uv run python -c \
 ```
 Expected: 7-class(moving/drinking/eating_paste/eating_prey/hand_feeding/shedding/unseen) 프롬프트가 저장됨. 파일 상단에 `<!-- 이식: petcam-lab build_system_prompt('crested_gecko','v4.0') 2026-07-06 -->` 주석 추가.
 
-- [ ] **Step 2: 스파이크 — `claude -p`에 로컬 이미지 먹이는 방식 확정**
+- [x] **Step 2: 스파이크 — `claude -p`에 로컬 이미지 먹이는 방식 확정**
 
 > **기술 미지수:** headless `claude -p`가 프레임 이미지를 보게 하는 정확한 방식. 후보 3개를 clip 1개로 실측해 **가장 안정적인 것 채택**(이 스텝은 계획의 placeholder가 아니라 명시적 검증 스텝).
 
@@ -408,7 +408,9 @@ Expected: 7-class(moving/drinking/eating_paste/eating_prey/hand_feeding/shedding
 
 Expected: 셋 중 하나가 프레임 내용을 반영한 JSON 라벨을 반환. 채택 방식을 Step 3 코드에 반영하고 이 문서에 결과 1줄 기록.
 
-- [ ] **Step 3: `reporter/classify.py` — 확정 방식으로 clip 분류**
+**✅ 스파이크 결과 (2026-07-06):** 후보 **A+B 채택** — 경로 나열 + `--allowedTools Read` + `--add-dir` + `--append-system-prompt-file` + `--model sonnet` + `--output-format json`. claude 가 Read 로 로컬 프레임을 정확히 봄(게코 위치까지 검출), 9프레임 → `{action:moving, conf:0.62}` 정확 파싱. ⚠️ **비용/토큰: clip당 ~12만 토큰**(cache_creation 66K + read 55K, output 2K / API 환산 $0.44). 구독은 청구가 아닌 rate-limit이라 **토큰량이 한도 지표** — 밤 수백 clip = 수천만 토큰/night → **전량 분석 시 5h rolling 한도 초과 위험 큼**. → **W4 재설계 신호**: 활동량·시간대(리포트 뼈대)는 motion_clips DB(started_at 분포·clip 수·duration)만으로 claude 0회 산출 가능, claude 는 행동 종류 태깅(탈피/음수)에만 샘플 투입.
+
+- [x] **Step 3: `reporter/classify.py` — 확정 방식으로 clip 분류**
 
 아래는 후보 A/B 채택 가정 골격(스파이크 결과로 명령어만 확정):
 
@@ -460,11 +462,11 @@ def _parse(stdout: str) -> dict:
     return {"action": "unseen", "confidence": 0.0}  # 파싱 실패 = 보수적 unseen
 ```
 
-- [ ] **Step 4: 수동 검증 — clip 1개 분류**
+- [x] **Step 4: 수동 검증 — clip 1개 분류**
 
 W2 Step3에서 뽑은 프레임으로 `classify_clip(imgs)` 실행 → 라벨 확인. moving/shedding 등 v4.0 클래스가 나오는지, error가 아닌지.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add reporter/prompts/system.v4.0.md reporter/classify.py

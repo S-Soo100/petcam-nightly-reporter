@@ -27,3 +27,22 @@ def summarize_activity(clips) -> dict:
         "peak_hour_kst": hours.most_common(1)[0][0] if hours else None,
         "hourly_kst": dict(hours),
     }
+
+
+_FEEDING = {"eating_paste", "eating_prey", "hand_feeding"}
+
+
+def summarize_behaviors(labeled) -> dict:
+    """샘플 clip 라벨(classify_clip 결과)들 → 행동 관찰 집계. 뼈대(activity)와 별개.
+
+    labeled = [{action, ...}]. motion_score 상위 N개만 claude 태깅한 샘플 → "무슨 행동이
+    관찰됐나"(탈피·음수·급여) 신호. 샘플이라 '관찰됨' 수준 — 부재 증명은 아님(못 본 것뿐).
+    """
+    actions = Counter(it["action"] for it in labeled)
+    return {
+        "sampled_count": len(labeled),
+        "actions": dict(actions),
+        "shed_observed": actions.get("shedding", 0) > 0,
+        "drink_observed": actions.get("drinking", 0) > 0,
+        "feeding_observed": any(actions.get(a, 0) > 0 for a in _FEEDING),
+    }

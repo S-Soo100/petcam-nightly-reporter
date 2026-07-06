@@ -4,7 +4,7 @@
 clip 존재 = 그 시각 활동. claude 는 W4b 에서 행동 종류 태깅에만 투입(샘플).
 """
 from reporter.indexer import ClipMeta
-from reporter.summarize import summarize_activity
+from reporter.summarize import summarize_activity, summarize_behaviors
 
 
 def _clip(started_at: str, duration_sec: float, motion: float = 0.5) -> ClipMeta:
@@ -32,3 +32,40 @@ def test_summarize_activity_empty():
     assert s["active_minutes"] == 0.0
     assert s["peak_hour_kst"] is None
     assert s["hourly_kst"] == {}
+
+
+def test_summarize_behaviors():
+    # classify_clip 결과들(샘플). 뼈대(activity)와 별개로 "무슨 행동이 관찰됐나".
+    labeled = [
+        {"action": "moving"},
+        {"action": "moving"},
+        {"action": "drinking"},
+        {"action": "shedding"},
+    ]
+    b = summarize_behaviors(labeled)
+    assert b["sampled_count"] == 4
+    assert b["actions"] == {"moving": 2, "drinking": 1, "shedding": 1}
+    assert b["shed_observed"] is True
+    assert b["drink_observed"] is True
+    assert b["feeding_observed"] is False   # eating_*/hand_feeding 없음
+
+
+def test_summarize_behaviors_feeding_and_errors():
+    labeled = [
+        {"action": "eating_paste"},
+        {"action": "hand_feeding"},
+        {"action": "error"},                # 분류 실패는 행동 아님 — 카운트만
+    ]
+    b = summarize_behaviors(labeled)
+    assert b["feeding_observed"] is True     # eating_paste 또는 hand_feeding
+    assert b["shed_observed"] is False
+    assert b["actions"]["error"] == 1
+
+
+def test_summarize_behaviors_empty():
+    b = summarize_behaviors([])
+    assert b["sampled_count"] == 0
+    assert b["actions"] == {}
+    assert b["shed_observed"] is False
+    assert b["drink_observed"] is False
+    assert b["feeding_observed"] is False

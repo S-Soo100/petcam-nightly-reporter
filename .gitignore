@@ -1,0 +1,14 @@
+# 비밀값 — 절대 커밋 금지 (donts §11)
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# 로컬 임시 (clip 다운로드/프레임)
+/tmp/
+tmp/
+
+.DS_Store

@@ -29,6 +29,10 @@ FRAME_LONG_EDGE = 1080  # no-upscale cap
 # (밤 top-1)로 시작 — nightly 4회×5 와 claude 호출량 동급. 오늘밤 로그 여유 보고 2 로 상향 검토.
 SAMPLE_TOP_N = int(os.environ.get("SAMPLE_TOP_N", "1"))
 
+# 밤(20~06시 KST)만 분석 — SAMPLE_TOP_N↑ 하면 낮 A카메라 오탐이 claude 한도를 갉아먹어 밤 예산이
+# 준다. 낮 창은 worker 가 즉시 종료(claude 0). NIGHT_ONLY=0 으로 24h 복귀. (2026-07-07)
+NIGHT_ONLY = os.environ.get("NIGHT_ONLY", "1") == "1"
+
 # 하이라이트 자동 등록(auto-register): informative 샘플을 camera_clips 미러 + behavior_logs(vlm
 # 후보)로 편입 → 앱 추론뷰·라벨링 큐에 노출. owner/pet 은 단일 오너 펫캠 상수(lab recipe
 # register_motion_candidates.py 와 동일). 문제 시 REGISTER_HIGHLIGHTS=0 으로 즉시 차단.

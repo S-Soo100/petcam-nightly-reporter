@@ -21,6 +21,11 @@ _KST = ZoneInfo("Asia/Seoul")
 
 def run() -> int:
     now = datetime.now(_KST)
+    # 밤(20~06시 KST)만 분석 — SAMPLE_TOP_N↑ 하면 낮 A카메라 오탐이 claude 한도를 갉아먹어
+    # 밤 예산이 줄어든다. 낮 창은 즉시 종료(claude 0). (2026-07-07 결정, config.NIGHT_ONLY 로 토글)
+    if config.NIGHT_ONLY and not (now.hour >= 20 or now.hour < 6):
+        print(f"[worker] {now:%m-%d %H:%M} skip(낮 — 밤만 분석)", flush=True)
+        return 0
     start, end = window_bounds(now, config.WINDOW_HOURS)
     clips = indexer.list_clips_for_window(start, end)
     if not clips:

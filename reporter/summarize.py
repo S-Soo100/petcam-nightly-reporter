@@ -42,10 +42,12 @@ def summarize_behaviors(labeled) -> dict:
     # claude 인프라 실패(호출/인증/한도) = classify 의 action=error. unseen(파싱실패/게코 부재)은
     # 분석엔 도달한 것이라 제외 — "조용한 한도실패"만 경보 대상(2026-07-07 며칠 샌 원인).
     failed_infra = actions.get("error", 0)
+    unseen = actions.get("unseen", 0)  # 게코 안 보임/불명 = '이 clip 은 분석 불필요' 신호(gate v3 전 대체 표시)
     return {
         "sampled_count": len(labeled),
         "actions": dict(actions),
         "failed_infra": failed_infra,
+        "unseen": unseen,
         "analyzed_ok": len(labeled) - failed_infra,
         "shed_observed": actions.get("shedding", 0) > 0,
         "drink_observed": actions.get("drinking", 0) > 0,

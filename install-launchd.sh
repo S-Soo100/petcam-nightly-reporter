@@ -31,8 +31,8 @@ PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 
 mkdir -p "$HOME/Library/LaunchAgents"
 
-# 야간 22/00/02/04시(로컬=KST 전제) → 각 배치가 직전 2h 윈도우 처리, 2h 간격으로
-# claude 한도 피크 분할(메모리 claude-subscription-quota-shared). 20~04시 커버.
+# 30분마다 상시(StartInterval) → 직전 30분(WINDOW_HOURS=0.5) 상황판. 활동 0 인 창은 worker
+# 가 스킵(빈 카드 방지)이라 낮엔 조용. claude 는 SAMPLE_TOP_N=1(밤 top-1)로 한도 통제.
 cat > "$PLIST" <<PLISTEOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -45,13 +45,7 @@ cat > "$PLIST" <<PLISTEOF
     </array>
     <key>WorkingDirectory</key><string>$REPO_DIR</string>
     <key>RunAtLoad</key><true/>
-    <key>StartCalendarInterval</key>
-    <array>
-        <dict><key>Hour</key><integer>22</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Hour</key><integer>0</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Hour</key><integer>2</integer><key>Minute</key><integer>0</integer></dict>
-        <dict><key>Hour</key><integer>4</integer><key>Minute</key><integer>0</integer></dict>
-    </array>
+    <key>StartInterval</key><integer>1800</integer>
     <key>StandardOutPath</key><string>/tmp/nightly-reporter.log</string>
     <key>StandardErrorPath</key><string>/tmp/nightly-reporter.log</string>
     <key>EnvironmentVariables</key>
@@ -66,6 +60,6 @@ launchctl bootstrap "gui/$(id -u)" "$PLIST"
 
 echo "✅ installed + bootstrapped: $PLIST"
 echo "   PATH=$LAUNCHD_PATH"
-echo "   즉시 1회(RunAtLoad) + 야간 22/00/02/04시(KST 로컬) 실행"
+echo "   즉시 1회(RunAtLoad) + 30분마다(활동시 상황판 · 무활동시 스킵)"
 echo "   로그:  tail -f /tmp/nightly-reporter.log"
 echo "   해제:  launchctl bootout gui/\$(id -u)/$LABEL && rm \"$PLIST\""

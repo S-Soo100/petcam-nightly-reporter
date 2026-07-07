@@ -17,7 +17,7 @@ R2_ACCESS_KEY_ID = os.environ.get("R2_ACCESS_KEY_ID", "")
 R2_SECRET_ACCESS_KEY = os.environ.get("R2_SECRET_ACCESS_KEY", "")
 R2_BUCKET = os.environ.get("R2_BUCKET", "")
 
-WINDOW_HOURS = float(os.environ.get("WINDOW_HOURS", "2"))
+WINDOW_HOURS = float(os.environ.get("WINDOW_HOURS", "0.5"))  # 30분 상황판(준실시간). 2h→0.5h
 
 # 적응형 프레임 추출 (lab 레시피 v4.0 기준 — feedback_adaptive_frame_sampling)
 FRAME_INTERVAL_SEC = 3.5
@@ -25,8 +25,9 @@ FRAME_MIN = 6
 FRAME_MAX = 20
 FRAME_LONG_EDGE = 1080  # no-upscale cap
 
-# W4b 샘플 태깅: motion_score 상위 N개 clip 만 claude 분류(한도 통제). 밤 실측 후 조정.
-SAMPLE_TOP_N = int(os.environ.get("SAMPLE_TOP_N", "5"))
+# W4b 샘플 태깅: motion_score 상위 N개 clip 만 claude 분류(한도 통제). 30분 상황판은 창당 1개
+# (밤 top-1)로 시작 — nightly 4회×5 와 claude 호출량 동급. 오늘밤 로그 여유 보고 2 로 상향 검토.
+SAMPLE_TOP_N = int(os.environ.get("SAMPLE_TOP_N", "1"))
 
 # 이식한 lab 자산 버전 (drift 추적)
 LAB_PROMPT_VERSION = "v4.0"

@@ -21,6 +21,10 @@ def run() -> int:
     now = datetime.now(_KST)
     start, end = window_bounds(now, config.WINDOW_HOURS)
     clips = indexer.list_clips_for_window(start, end)
+    if not clips:
+        # 활동 0 인 창은 상황판 스킵(빈 카드 스팸 방지) — 로그로만 흔적.
+        print(f"[worker] {now:%m-%d %H:%M} clips=0 skip(no activity)", flush=True)
+        return 0
     activity = summarize_activity(clips)          # 뼈대: DB 만, 0 비용
     behaviors = _tag_sample(clips)                # 샘플: claude top-N
     ok = slack.post_slack(_format(activity, behaviors, now))
@@ -57,9 +61,10 @@ def _tag_sample(clips) -> dict:
 
 
 def _format(activity: dict, behaviors: dict, now: datetime) -> str:
-    """활동(DB) + 행동(claude 샘플) → Slack 1카드. 순수 표현 함수."""
+    """활동(DB) + 행동(claude 샘플) → Slack 상황판 1카드. 순수 표현 함수."""
+    win_min = int(config.WINDOW_HOURS * 60)
     if activity["clip_count"] == 0:
-        return f"🦎 최근 {config.WINDOW_HOURS}h: 활동 클립 없음 ({now:%m/%d %H:%M} KST)"
+        return f"🦎 최근 {win_min}분: 활동 없음 ({now:%m/%d %H:%M} KST)"
     peak = f"{activity['peak_hour_kst']}시경 집중" if activity["peak_hour_kst"] is not None else "활동 분산"
     top = sorted(activity["hourly_kst"].items(), key=lambda kv: -kv[1])[:3]  # 상위 3 시간대
     dist = " ".join(f"{h}시:{n}" for h, n in top)
@@ -70,20 +75,25 @@ def _format(activity: dict, behaviors: dict, now: datetime) -> str:
         signals.append("💧음수")
     if behaviors["feeding_observed"]:
         signals.append("🍽급여")
-    # claude 가 한도/인증으로 실패했는데 '특이행동 없음' 으로 나가면 정상과 구분이 안 됨(조용한
-    # 실패). 전량 실패는 경보로 대체, 일부 실패는 꼬리표로 붙여 리포트만 봐도 즉시 인지되게.
-    failed, sampled = behaviors["failed_infra"], behaviors["sampled_count"]
+    # 샘플 라벨 → 신호 우선순위: (1)claude 인프라 전량실패 경보 (2)특이행동 (3)게코 부재(unseen=
+    # 분석불필요, gate v3 전 대체신호) (4)그 외(moving 등). '특이행동 없음' 과 '게코 안 보임' 을
+    # 구분해야 조용한 한도실패도, 노이즈성 움직임도 리포트만 봐서 판별됨.
+    failed = behaviors["failed_infra"]
+    sampled = behaviors["sampled_count"]
+    unseen = behaviors["unseen"]
     if sampled > 0 and failed >= sampled:
         sig = f"⚠️분석실패 {failed}/{sampled} (claude 한도/인증 — 로그 확인)"
+    elif signals:
+        sig = " ".join(signals) + (f" ⚠️일부실패 {failed}/{sampled}" if failed else "")
+    elif sampled > 0 and unseen >= sampled:
+        sig = "게코 안 보임(분석불필요)"
     else:
-        sig = " ".join(signals) if signals else "특이행동 없음"
-        if failed:
-            sig += f" ⚠️일부실패 {failed}/{sampled}"
+        sig = "특이행동 없음" + (f" ⚠️일부실패 {failed}/{sampled}" if failed else "")
     return (
-        f"🦎 최근 {config.WINDOW_HOURS}h 활동 요약 ({now:%m/%d %H:%M} KST)\n"
-        f"· 활동 클립 {activity['clip_count']}개 (~{activity['active_minutes']}분)\n"
+        f"🦎 최근 {win_min}분 상황판 ({now:%m/%d %H:%M} KST)\n"
+        f"· 움직임 {activity['clip_count']}회 (~{activity['active_minutes']}분)\n"
         f"· {peak} · 시간대(KST) {dist}\n"
-        f"· 행동(상위{behaviors['sampled_count']}클립 샘플): {sig}"
+        f"· 샘플{sampled}: {sig}"
     )
 
 

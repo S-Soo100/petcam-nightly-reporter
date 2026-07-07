@@ -76,6 +76,7 @@ def test_summarize_behaviors_failed_infra_excludes_unseen():
     ]
     b = summarize_behaviors(labeled)
     assert b["failed_infra"] == 2          # error 2건만
+    assert b["unseen"] == 1                # unseen 1건(별도 카운트)
     assert b["analyzed_ok"] == 2           # 4 - 2 (unseen·moving 은 도달)
 
 

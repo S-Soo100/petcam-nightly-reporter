@@ -17,8 +17,8 @@ def _activity(clip_count=10):
             "peak_hour_kst": 2, "hourly_kst": {2: 6, 3: 4}}
 
 
-def _beh(sampled, failed, shed=False, drink=False, feed=False):
-    return {"sampled_count": sampled, "failed_infra": failed,
+def _beh(sampled, failed, shed=False, drink=False, feed=False, unseen=0):
+    return {"sampled_count": sampled, "failed_infra": failed, "unseen": unseen,
             "analyzed_ok": sampled - failed,
             "shed_observed": shed, "drink_observed": drink, "feeding_observed": feed}
 
@@ -42,6 +42,13 @@ def test_format_clean_no_alert():
     assert "⚠️" not in msg
 
 
+def test_format_unseen_shows_gecko_absent():
+    # 분석한 clip 이 unseen → '특이행동 없음' 이 아니라 '게코 안 보임(분석불필요)' 로 구분
+    msg = _format(_activity(), _beh(1, 0, unseen=1), _NOW)
+    assert "게코 안 보임" in msg
+    assert "특이행동 없음" not in msg
+
+
 def test_format_no_behavior_but_success_no_alert():
     # 성공했는데 특이행동만 없음 → 경보 없이 '특이행동 없음'
     msg = _format(_activity(), _beh(5, 0), _NOW)
@@ -52,4 +59,4 @@ def test_format_no_behavior_but_success_no_alert():
 def test_format_no_clips_short_circuit():
     empty = {"clip_count": 0, "active_minutes": 0.0, "peak_hour_kst": None, "hourly_kst": {}}
     msg = _format(empty, _beh(0, 0), _NOW)
-    assert "활동 클립 없음" in msg
+    assert "활동 없음" in msg

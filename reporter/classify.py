@@ -46,6 +46,16 @@ def classify_clip(frame_paths: list[Path]) -> dict:
     if r.returncode != 0:
         print(f"[classify] rc={r.returncode}: {r.stderr.strip()[:200]}")
         return {"action": "error", "confidence": 0.0}
+    # claude 는 인증·한도 실패도 rc=0 + envelope {"is_error": true, "result": "Not logged in …"}
+    # 형태로 반환한다. rc 만 검사하면 이 에러가 _parse 에서 조용히 unseen 으로 새서(로그 0바이트로
+    # 남지도 않아) "행동만 빈 리포트"가 며칠 지속돼도 못 알아챈다(2026-07-07 실측). envelope 레벨에서 먼저 잡는다.
+    try:
+        envelope = json.loads(r.stdout)
+    except json.JSONDecodeError:
+        envelope = None
+    if isinstance(envelope, dict) and envelope.get("is_error"):
+        print(f"[classify] api_error: {str(envelope.get('result'))[:200]}")
+        return {"action": "error", "confidence": 0.0}
     return _parse(r.stdout)
 
 

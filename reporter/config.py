@@ -29,5 +29,14 @@ FRAME_LONG_EDGE = 1080  # no-upscale cap
 # (밤 top-1)로 시작 — nightly 4회×5 와 claude 호출량 동급. 오늘밤 로그 여유 보고 2 로 상향 검토.
 SAMPLE_TOP_N = int(os.environ.get("SAMPLE_TOP_N", "1"))
 
+# 하이라이트 자동 등록(auto-register): informative 샘플을 camera_clips 미러 + behavior_logs(vlm
+# 후보)로 편입 → 앱 추론뷰·라벨링 큐에 노출. owner/pet 은 단일 오너 펫캠 상수(lab recipe
+# register_motion_candidates.py 와 동일). 문제 시 REGISTER_HIGHLIGHTS=0 으로 즉시 차단.
+REGISTER_HIGHLIGHTS = os.environ.get("REGISTER_HIGHLIGHTS", "1") == "1"
+REGISTER_OWNER_USER_ID = os.environ.get("REGISTER_OWNER_USER_ID", "380d97fd-cb83-4490-ac26-cf691b32614f")
+REGISTER_PET_ID = os.environ.get("REGISTER_PET_ID", "55518f35-b251-4ed7-962f-b65611d63223")
+REGISTER_VLM_MODEL = "claude-sonnet-4-6"  # 실제 모델(--model sonnet). nightly 출처는 behavior_logs.notes
+REGISTER_SKIP_ACTIONS = frozenset({"moving", "error", "unseen"})  # 흔함/분류실패/게코부재 제외
+
 # 이식한 lab 자산 버전 (drift 추적)
 LAB_PROMPT_VERSION = "v4.0"

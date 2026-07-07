@@ -10,7 +10,9 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from reporter import classify, config, frames, indexer, r2, slack
+from supabase import create_client
+
+from reporter import classify, config, frames, indexer, r2, register, slack
 from reporter.summarize import summarize_activity, summarize_behaviors
 from reporter.timewin import window_bounds
 
@@ -41,11 +43,15 @@ def run() -> int:
 
 
 def _tag_sample(clips) -> dict:
-    """motion_score 상위 N개 clip 만 다운→프레임→claude 분류 → 행동 집계.
+    """motion_score 상위 N개 clip 만 다운→프레임→claude 분류 → 행동 집계 + 하이라이트 등록.
 
     clip 1개 실패(다운/추출/claude)가 윈도우 전체를 막지 않게 격리(action=error 로 계속).
+    informative 라벨은 camera_clips+behavior_logs 로 자동 편입(앱 추론뷰·라벨링 큐 노출).
+    등록 실패는 별도 격리 — 라벨/Slack 은 그대로(등록은 부가 기능).
     """
     top = sorted(clips, key=lambda c: c.motion_score, reverse=True)[:config.SAMPLE_TOP_N]
+    # service_role client (RLS 우회 — camera_clips/behavior_logs 쓰기). 등록 off 면 생성 안 함.
+    sb = create_client(config.SUPABASE_URL, config.SUPABASE_KEY) if config.REGISTER_HIGHLIGHTS else None
     labeled = []
     with tempfile.TemporaryDirectory() as tmp:
         for c in top:
@@ -57,7 +63,24 @@ def _tag_sample(clips) -> dict:
                 print(f"[worker] clip {c.id[:8]} skip: {e}", file=sys.stderr)
                 label = {"action": "error"}
             labeled.append(label)
+            _maybe_register(sb, c, label)
     return summarize_behaviors(labeled)
+
+
+def _maybe_register(sb, clip, label: dict) -> None:
+    """informative 라벨이면 하이라이트 등록(앱/라벨링 노출). 실패는 격리 — 리포트 흐름 불변."""
+    if sb is None:
+        return
+    action = label.get("action", "")
+    if not register.should_register(action):
+        return
+    try:
+        status = register.register_highlight(
+            sb, clip, action, label.get("confidence"), label.get("reasoning", "")
+        )
+        print(f"[worker] register {clip.id[:8]} {action} -> {status}", flush=True)
+    except Exception as e:  # noqa: BLE001 — 등록 실패 격리, 리포트는 계속
+        print(f"[worker] register {clip.id[:8]} FAIL: {e}", file=sys.stderr, flush=True)
 
 
 def _format(activity: dict, behaviors: dict, now: datetime) -> str:

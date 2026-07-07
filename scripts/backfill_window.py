@@ -11,12 +11,13 @@ Slack 안 보냄 — 콘솔 출력만(파일럿/검증 모드). worker 와 분�
 - --out 에 각 clip 즉시 기록 → 한도로 중단돼도 재실행 시 done skip 하고 다음 배치 이어서.
   단 action=error(claude 호출 실패=한도/인증)는 기록 안 함 → 재개 때 재시도(구멍 방지).
 - --camera ALL 로 두 카메라 통합.
+- --night-only 로 밤(20~06시 KST)만 — 여러 밤에 걸친 범위에서 낮 오탐 제외(worker 대상과 일치).
 
 예:
   uv run python scripts/backfill_window.py --dry-run                          # 목록만(claude 0)
-  uv run python scripts/backfill_window.py --camera ALL --sort started_at \\
-    --start 2026-07-03T20:00:00+09:00 --end 2026-07-07T06:00:00+09:00 \\
-    --top-n 300 --out storage/backfill/backlog.jsonl                          # 맨 앞 300개, 중단 시 재실행으로 재개
+  uv run python scripts/backfill_window.py --camera ALL --sort started_at --night-only \\
+    --start 2026-07-03T20:00:00+09:00 --end 2026-07-05T06:00:00+09:00 \\
+    --top-n 300 --out storage/backfill/backlog.jsonl                          # 다음 300개, 중단 시 재실행으로 재개
 """
 import argparse
 import json
@@ -45,21 +46,27 @@ def _kst(iso_utc: str) -> str:
     return datetime.fromisoformat(iso_utc).astimezone(_KST).strftime("%m-%d %H:%M")
 
 
+def _hour_kst(iso_utc: str) -> int:
+    return datetime.fromisoformat(str(iso_utc)).astimezone(_KST).hour
+
+
 def _all_clips_in(start: datetime, end: datetime):
-    """넓은 창은 Supabase 기본 limit(1000)에 걸려 최신분이 잘리니, 하루씩 잘라 조회·합친다."""
+    """넓은 창은 Supabase 기본 limit(1000)에 걸려 잘리니, 12h 씩 잘라 조회·합친다(하루도 1000 초과 사례 있음)."""
     out, cur = [], start
     while cur < end:
-        nxt = min(cur + timedelta(days=1), end)
+        nxt = min(cur + timedelta(hours=12), end)
         out.extend(indexer.list_clips_for_window(cur, nxt))
         cur = nxt
     return out
 
 
-def select_clips(start: datetime, end: datetime, camera_id: str, sort_key: str):
-    """[start, end) 창 조회 → camera 필터(ALL=전체) → 정렬. 전수 반환(배치 슬라이스는 호출측)."""
+def select_clips(start: datetime, end: datetime, camera_id: str, sort_key: str, night_only: bool):
+    """[start, end) 창 조회 → camera 필터(ALL=전체) → (옵션)밤만 → 정렬. 전수 반환(배치 슬라이스는 호출측)."""
     clips = _all_clips_in(start, end)
     if camera_id != "ALL":
         clips = [c for c in clips if c.camera_id == camera_id]
+    if night_only:
+        clips = [c for c in clips if _hour_kst(c.started_at) >= 20 or _hour_kst(c.started_at) < 6]
     if sort_key == "started_at":
         clips.sort(key=lambda c: str(c.started_at))  # asc = 오래된 것부터(맨 앞)
     else:
@@ -75,6 +82,7 @@ def main() -> int:
     ap.add_argument("--camera", default="B", help="A/B/ALL 별칭 또는 camera_id UUID")
     ap.add_argument("--top-n", type=int, default=10, help="이번 배치 크기(재개 시 남은 것 중 앞 N개)")
     ap.add_argument("--sort", default="motion_score", choices=["motion_score", "duration", "started_at"])
+    ap.add_argument("--night-only", action="store_true", help="밤(20~06시 KST)만 — 여러 밤 범위에서 낮 제외")
     ap.add_argument("--out", type=Path, help="결과 jsonl 저장(등록 입력 겸 재개 상태). error 는 미기록→재개 시 재시도")
     ap.add_argument("--dry-run", action="store_true", help="이번 배치 목록만 출력(claude 호출 0)")
     args = ap.parse_args()
@@ -84,14 +92,15 @@ def main() -> int:
     cam_label = args.camera.upper() if args.camera.upper() in CAMERAS else args.camera.upper()[:8]
 
     # 전수 정렬 → done(이미 기록된 성공분) 제외 → 남은 것 앞 top_n = 이번 배치(재개 정확).
-    all_clips = select_clips(start, end, camera_id, args.sort)
+    all_clips = select_clips(start, end, camera_id, args.sort, args.night_only)
     done_ids: set[str] = set()
     if args.out and args.out.exists():
         done_ids = {json.loads(x)["clip_id"] for x in args.out.read_text().splitlines() if x.strip()}
     remaining = [c for c in all_clips if c.id not in done_ids]
     top = remaining[: args.top_n]
 
-    print(f"[백필] 카메라 {cam_label} · {args.start} ~ {args.end} · {args.sort}")
+    scope = " · 밤만" if args.night_only else ""
+    print(f"[백필] 카메라 {cam_label} · {args.start} ~ {args.end} · {args.sort}{scope}")
     print(f"  전수 {len(all_clips)} · 완료 {len(done_ids)} · 남은 {len(remaining)} → 이번 배치 {len(top)}개")
     for i, c in enumerate(top, 1):
         print(f"  {i:3d}. {_kst(c.started_at)}  score={c.motion_score:.4f}  dur={c.duration_sec:.0f}s  {c.id[:8]}")

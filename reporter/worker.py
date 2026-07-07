@@ -23,7 +23,16 @@ def run() -> int:
     clips = indexer.list_clips_for_window(start, end)
     activity = summarize_activity(clips)          # 뼈대: DB 만, 0 비용
     behaviors = _tag_sample(clips)                # 샘플: claude top-N
-    slack.post_slack(_format(activity, behaviors, now))
+    ok = slack.post_slack(_format(activity, behaviors, now))
+    # 매 실행 요약 1줄 — 성공/실패 무조건 로그로 흔적(관측성). 성공 경로가 조용해 로그가
+    # 0바이트로 남는 바람에 '조용한 한도실패'를 며칠 못 챈 게 2026-07-07 근본원인.
+    print(
+        f"[worker] {now:%m-%d %H:%M} clips={activity['clip_count']} "
+        f"sampled={behaviors['sampled_count']} ok={behaviors['analyzed_ok']} "
+        f"fail={behaviors['failed_infra']} slack={'OK' if ok else 'FAIL'} "
+        f"actions={behaviors['actions']}",
+        flush=True,
+    )
     return 0
 
 
@@ -61,7 +70,15 @@ def _format(activity: dict, behaviors: dict, now: datetime) -> str:
         signals.append("💧음수")
     if behaviors["feeding_observed"]:
         signals.append("🍽급여")
-    sig = " ".join(signals) if signals else "특이행동 없음"
+    # claude 가 한도/인증으로 실패했는데 '특이행동 없음' 으로 나가면 정상과 구분이 안 됨(조용한
+    # 실패). 전량 실패는 경보로 대체, 일부 실패는 꼬리표로 붙여 리포트만 봐도 즉시 인지되게.
+    failed, sampled = behaviors["failed_infra"], behaviors["sampled_count"]
+    if sampled > 0 and failed >= sampled:
+        sig = f"⚠️분석실패 {failed}/{sampled} (claude 한도/인증 — 로그 확인)"
+    else:
+        sig = " ".join(signals) if signals else "특이행동 없음"
+        if failed:
+            sig += f" ⚠️일부실패 {failed}/{sampled}"
     return (
         f"🦎 최근 {config.WINDOW_HOURS}h 활동 요약 ({now:%m/%d %H:%M} KST)\n"
         f"· 활동 클립 {activity['clip_count']}개 (~{activity['active_minutes']}분)\n"

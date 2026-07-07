@@ -48,6 +48,8 @@ def test_summarize_behaviors():
     assert b["shed_observed"] is True
     assert b["drink_observed"] is True
     assert b["feeding_observed"] is False   # eating_*/hand_feeding 없음
+    assert b["failed_infra"] == 0
+    assert b["analyzed_ok"] == 4
 
 
 def test_summarize_behaviors_feeding_and_errors():
@@ -60,6 +62,21 @@ def test_summarize_behaviors_feeding_and_errors():
     assert b["feeding_observed"] is True     # eating_paste 또는 hand_feeding
     assert b["shed_observed"] is False
     assert b["actions"]["error"] == 1
+    assert b["failed_infra"] == 1
+    assert b["analyzed_ok"] == 2
+
+
+def test_summarize_behaviors_failed_infra_excludes_unseen():
+    # failed_infra 는 claude 인프라 실패(error)만 — unseen(분석 도달·게코 부재/파싱실패)은 제외.
+    labeled = [
+        {"action": "error"},
+        {"action": "error"},
+        {"action": "unseen"},
+        {"action": "moving"},
+    ]
+    b = summarize_behaviors(labeled)
+    assert b["failed_infra"] == 2          # error 2건만
+    assert b["analyzed_ok"] == 2           # 4 - 2 (unseen·moving 은 도달)
 
 
 def test_summarize_behaviors_empty():
@@ -69,3 +86,5 @@ def test_summarize_behaviors_empty():
     assert b["shed_observed"] is False
     assert b["drink_observed"] is False
     assert b["feeding_observed"] is False
+    assert b["failed_infra"] == 0
+    assert b["analyzed_ok"] == 0

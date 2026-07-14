@@ -145,8 +145,34 @@ def _log(now: datetime, cameras: int, stats: dict, policy: ActivityPolicy, model
     )
 
 
-def run(*, sb=None, now: datetime | None = None) -> int:
+def _filter_by_policy(settings, worker_version: str):
+    """active_policy_version == worker_version 인 카메라만 통과. null/불일치는 그 카메라만 skip + 로그.
+
+    A단계 guard(§14): 잘못된 policy 로 evidence/assessment 를 저장하지 않기 위한 fail-open. 전체 batch 는
+    중단하지 않고 일치 카메라만 처리한다. 불일치 카메라는 여기서 걸러져 clip 조회/다운로드/추론에 도달하지 않는다.
+    """
+    matched = []
+    for s in settings:
+        if s.active_policy_version == worker_version:
+            matched.append(s)
+        else:
+            got = s.active_policy_version if s.active_policy_version is not None else "null"
+            print(f"[activity] camera {s.camera_id[:8]} policy mismatch settings={got} worker={worker_version} — skip",
+                  flush=True)
+    return matched
+
+
+def run(
+    *,
+    sb=None,
+    now: datetime | None = None,
+    load_detector_fn=load_detector,
+    download_fn=None,
+    assess_fn=None,
+) -> int:
     now = now or datetime.now(timezone.utc)
+    download_fn = download_fn if download_fn is not None else r2.download_clip
+    assess_fn = assess_fn if assess_fn is not None else assess_clip
     lock_fd = _acquire_lock()
     if lock_fd is None:
         print("[activity] already running (flock) — skip", flush=True)
@@ -157,7 +183,14 @@ def run(*, sb=None, now: datetime | None = None) -> int:
         if not settings:
             print(f"[activity] {now:%m-%d %H:%M} no enabled cameras — skip", flush=True)
             return 0
-        camera_ids = [s.camera_id for s in settings]
+        # A단계 guard: worker policy 와 카메라 active_policy_version 이 일치하는 카메라만 처리(null/불일치 skip).
+        worker_version = config.ACTIVITY_POLICY_VERSION
+        matched = _filter_by_policy(settings, worker_version)
+        if not matched:
+            print(f"[activity] {now:%m-%d %H:%M} no matching policy cameras (worker={worker_version}) — skip",
+                  flush=True)
+            return 0
+        camera_ids = [s.camera_id for s in matched]
         policy = _build_policy()
         checkpoint = config.GATE_CHECKPOINT_PATH
         model_version = model_version_for(checkpoint)
@@ -169,11 +202,11 @@ def run(*, sb=None, now: datetime | None = None) -> int:
         if not clips:
             print(f"[activity] {now:%m-%d %H:%M} cameras={len(camera_ids)} no unprocessed clips", flush=True)
             return 0
-        detector = load_detector(checkpoint, policy.gate_threshold)
+        detector = load_detector_fn(checkpoint, policy.gate_threshold)
         producer = ProducerInfo(host=socket.gethostname(), run_id=f"{now:%Y%m%dT%H%M%S}")
         stats = process_batch(
             sb, clips, detector, policy, checkpoint, producer,
-            download_fn=r2.download_clip, assess_fn=assess_clip, store_fn=store_evidence_and_assessment,
+            download_fn=download_fn, assess_fn=assess_fn, store_fn=store_evidence_and_assessment,
             find_prelabel_fn=find_prelabel, reconstruct_fn=reconstruct_evidence,
             store_assessment_fn=store_assessment_only,
             model_version=model_version, checkpoint_sha=ckpt_sha,

@@ -16,6 +16,7 @@ from gecko_vision_gate.provenance import SAMPLER_VERSION, SCHEMA_VERSION, GatePr
 from gecko_vision_gate.schema import PrelabelResult
 
 from reporter import activity_worker
+from reporter.activity_settings import CameraFilterSetting
 from reporter.activity_store import (
     ProducerInfo,
     find_prelabel,
@@ -184,3 +185,79 @@ def test_build_policy_versioned_presets(monkeypatch):
     monkeypatch.setattr(cfg, "ACTIVITY_POLICY_VERSION", "activity-v0")
     p0 = activity_worker._build_policy()
     assert p0.gate_threshold == 0.25 and p0.roi_flow_active == 2.0  # v0 원본(회귀 기준점)
+
+
+# --- A단계: policy-version 정합성 guard ---
+def _cs(cam, pv):
+    return CameraFilterSetting(camera_id=cam, enabled=True, exclude_absent_enabled=False,
+                               exclude_static_enabled=False, active_policy_version=pv)
+
+
+def _srow(cam, pv):
+    return {"camera_id": cam, "enabled": True, "exclude_absent_enabled": False,
+            "exclude_static_enabled": False, "active_policy_version": pv}
+
+
+_NOW = datetime.fromisoformat("2026-07-14T05:00:00+00:00")
+
+
+def test_filter_by_policy_matches_and_logs_mismatch_null(capsys):
+    settings = [_cs("cam-A", "activity-v1"), _cs("cam-B", "activity-v0"), _cs("cam-C", None)]
+    matched = activity_worker._filter_by_policy(settings, "activity-v1")
+    assert [s.camera_id for s in matched] == ["cam-A"]
+    out = capsys.readouterr().out
+    assert "camera cam-A po" not in out  # 일치는 skip 로그 없음
+    assert "policy mismatch settings=activity-v0 worker=activity-v1 — skip" in out
+    assert "policy mismatch settings=null worker=activity-v1 — skip" in out
+
+
+def test_run_all_mismatch_skips_without_detector_load(monkeypatch):
+    from reporter import config as cfg
+    monkeypatch.setattr(cfg, "ACTIVITY_POLICY_VERSION", "activity-v1")
+    sb = FakeSB({"camera_activity_filter_settings": [_srow("cam-A", "activity-v0"), _srow("cam-B", None)]})
+    calls = {"det": 0, "dl": 0, "assess": 0}
+    rc = activity_worker.run(
+        sb=sb, now=_NOW,
+        load_detector_fn=lambda *a, **k: calls.__setitem__("det", calls["det"] + 1),
+        download_fn=lambda *a, **k: calls.__setitem__("dl", calls["dl"] + 1),
+        assess_fn=lambda *a, **k: calls.__setitem__("assess", calls["assess"] + 1),
+    )
+    assert rc == 0
+    assert calls == {"det": 0, "dl": 0, "assess": 0}  # detector 미로드·다운로드/추론 0회
+    assert "clip_prelabels" not in sb.store and "clip_activity_assessments" not in sb.store
+
+
+def test_run_null_policy_skips_without_store(monkeypatch):
+    from reporter import config as cfg
+    monkeypatch.setattr(cfg, "ACTIVITY_POLICY_VERSION", "activity-v1")
+    sb = FakeSB({"camera_activity_filter_settings": [_srow("cam-A", None)]})
+    calls = {"det": 0}
+    rc = activity_worker.run(sb=sb, now=_NOW,
+                             load_detector_fn=lambda *a, **k: calls.__setitem__("det", calls["det"] + 1))
+    assert rc == 0 and calls["det"] == 0
+    assert "clip_prelabels" not in sb.store
+
+
+def test_run_processes_only_matching_policy(monkeypatch):
+    from reporter import config as cfg
+    monkeypatch.setattr(cfg, "ACTIVITY_POLICY_VERSION", "activity-v1")
+    mc = [
+        {"id": "a1", "camera_id": "cam-A", "started_at": "2026-07-14T01:00:00+00:00",
+         "duration_sec": 10.0, "r2_key": "ka", "motion_score": 0.1},
+        {"id": "b1", "camera_id": "cam-B", "started_at": "2026-07-14T01:00:00+00:00",
+         "duration_sec": 10.0, "r2_key": "kb", "motion_score": 0.1},
+    ]
+    sb = FakeSB({"camera_activity_filter_settings": [_srow("cam-A", "activity-v1"), _srow("cam-B", "activity-v0")],
+                 "motion_clips": mc})
+    processed = []
+    calls = {"det": 0}
+    rc = activity_worker.run(
+        sb=sb, now=_NOW,
+        load_detector_fn=lambda *a, **k: (calls.__setitem__("det", 1), object())[1],
+        download_fn=lambda key, dest: Path(dest).write_bytes(b"x"),
+        assess_fn=lambda path, det, pol, ck, clip_id, **k: (processed.append(clip_id), _ga(clip_id, "exclude_static"))[1],
+    )
+    assert rc == 0
+    assert calls["det"] == 1  # 일치 카메라 있어 detector 로드
+    assert processed == ["a1"]  # cam-A(일치) clip 만 처리, cam-B(불일치) 제외
+    assert {r["clip_id"] for r in sb.store["clip_prelabels"]} == {"a1"}

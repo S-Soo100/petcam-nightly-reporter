@@ -81,7 +81,7 @@ def test_register_idempotent_skips_existing():
 
 def test_should_register_filters_noninformative():
     assert register.should_register("drinking") is True
-    assert register.should_register("shedding") is True
+    assert register.should_register("shedding") is False  # b607290: 모프 흰체색 밤 IR 상시오탐 → skip 목록
     assert register.should_register("eating_paste") is True
     assert register.should_register("moving") is False   # 흔함
     assert register.should_register("error") is False     # 분류실패

@@ -49,3 +49,15 @@ REGISTER_SKIP_ACTIONS = frozenset(
 
 # 이식한 lab 자산 버전 (drift 추적)
 LAB_PROMPT_VERSION = "v4.0"
+
+# --- 활동필터 worker (activity_worker) — 기존 상황판 worker 와 완전 독립, Claude/VLM 0회 ---
+# Gate 체크포인트: REPO_ROOT 부모(../) 기준 조립 = 절대경로 하드코딩 아님. .env 로 override.
+GATE_CHECKPOINT_PATH = os.environ.get(
+    "GATE_CHECKPOINT_PATH",
+    str(REPO_ROOT.parent / "myPythonProjects/gecko-vision-gate/runs/gecko_v2/checkpoint_best_ema.pth"),
+)
+# threshold 0.25 는 recall 우선 후보값 — Phase 3 사람 GT 로 확정 전까지 정식값 아님(지시문 §207).
+GATE_THRESHOLD = float(os.environ.get("GATE_THRESHOLD", "0.25"))
+ACTIVITY_POLICY_VERSION = os.environ.get("ACTIVITY_POLICY_VERSION", "activity-v0")
+ACTIVITY_WINDOW_HOURS = float(os.environ.get("ACTIVITY_WINDOW_HOURS", "24"))
+ACTIVITY_BATCH_LIMIT = int(os.environ.get("ACTIVITY_BATCH_LIMIT", "200"))

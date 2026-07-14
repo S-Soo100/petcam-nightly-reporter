@@ -9,6 +9,9 @@ dependencies = [
     "supabase>=2.7",
     "boto3>=1.34",
     "opencv-python>=4.10",
+    # 활동필터 worker 가 Gate(RF-DETR) 를 같은 프로세스에서 재사용(subprocess/모델 재로드 금지,
+    # 지시문 §135). 로컬 editable path — 절대경로 하드코딩 아님(D4). 두 레포는 형제 위치.
+    "gecko-vision-gate",
 ]
 
 [dependency-groups]
@@ -18,6 +21,10 @@ dev = ["pytest>=8.0"]
 # 프로젝트 자체를 빌드/설치 대상으로 보지 않게 — deps 만 동기화.
 [tool.uv]
 package = false
+
+[tool.uv.sources]
+# ../myPythonProjects/gecko-vision-gate (nightly 레포와 형제). editable = gate 수정 즉시 반영.
+gecko-vision-gate = { path = "../myPythonProjects/gecko-vision-gate", editable = true }
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

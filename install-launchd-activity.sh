@@ -8,6 +8,9 @@
 set -euo pipefail
 
 LABEL="com.petcam.activity-worker"
+# activity shadow/worker 는 activity-v1 로 가동한다 — config 기본값 activity-v0 를 launchd 에서 명시 override.
+# DB camera_activity_filter_settings.active_policy_version 과 반드시 일치해야 worker guard 가 카메라를 skip 하지 않는다.
+POLICY_VERSION="activity-v1"
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 UV_BIN="$(command -v uv || true)"
@@ -39,10 +42,19 @@ cat > "$PLIST" <<PLISTEOF
     <key>StandardOutPath</key><string>/tmp/activity-worker.log</string>
     <key>StandardErrorPath</key><string>/tmp/activity-worker.log</string>
     <key>EnvironmentVariables</key>
-    <dict><key>PATH</key><string>$LAUNCHD_PATH</string></dict>
+    <dict>
+        <key>PATH</key><string>$LAUNCHD_PATH</string>
+        <key>ACTIVITY_POLICY_VERSION</key><string>$POLICY_VERSION</string>
+    </dict>
 </dict>
 </plist>
 PLISTEOF
+
+# plist 문법 검증 — 실패하면 설치하지 않고 종료(깨진 plist 로 bootstrap 방지)
+if ! plutil -lint "$PLIST" >/dev/null; then
+  echo "❌ plist lint 실패 — 설치 중단: $PLIST" >&2
+  exit 1
+fi
 
 # 멱등: 이미 등록돼 있으면 먼저 해제하고 재등록
 launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
@@ -50,6 +62,7 @@ launchctl bootstrap "gui/$(id -u)" "$PLIST"
 
 echo "✅ installed + bootstrapped: $PLIST"
 echo "   PATH=$LAUNCHD_PATH"
+echo "   ACTIVITY_POLICY_VERSION=$POLICY_VERSION"
 echo "   즉시 1회(RunAtLoad) + 1시간마다. 설정 없으면 0건 종료(앱 제외 없음)."
 echo "   로그:  tail -f /tmp/activity-worker.log"
 echo "   상태:  launchctl print gui/\$(id -u)/$LABEL | grep -Ei 'state|last exit'"

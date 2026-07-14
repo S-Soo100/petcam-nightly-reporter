@@ -19,13 +19,19 @@ from pathlib import Path
 
 from supabase import create_client
 
-from gecko_vision_gate.activity_policy import ActivityPolicy
-from gecko_vision_gate.provenance import SCHEMA_VERSION
+from gecko_vision_gate.activity_policy import ActivityPolicy, decide
+from gecko_vision_gate.provenance import SAMPLER_VERSION, SCHEMA_VERSION, checkpoint_sha256
 
 from reporter import config, r2
 from reporter.activity_indexer import list_unprocessed_clips
 from reporter.activity_settings import load_enabled_cameras
-from reporter.activity_store import ProducerInfo, store_evidence_and_assessment
+from reporter.activity_store import (
+    ProducerInfo,
+    find_prelabel,
+    reconstruct_evidence,
+    store_assessment_only,
+    store_evidence_and_assessment,
+)
 from reporter.gate_runner import assess_clip, load_detector, model_version_for
 
 _LOCK_PATH = "/tmp/petcam-activity-worker.lock"
@@ -43,20 +49,42 @@ def process_batch(
     download_fn,
     assess_fn,
     store_fn,
+    find_prelabel_fn=None,
+    reconstruct_fn=None,
+    store_assessment_fn=None,
+    model_version: str = "",
+    checkpoint_sha: str = "",
 ) -> dict:
-    """clip 리스트를 순차 처리. 한 clip 실패는 batch 를 멈추지 않는다(격리). 반환 stats."""
-    stats = {"clips": len(clips), "ok": 0, "failed": 0,
+    """clip 리스트를 순차 처리. 한 clip 실패는 batch 를 멈추지 않는다(격리). 반환 stats.
+
+    하드닝 3: 같은 evidence identity(model/schema/checkpoint/threshold/sampler)의 prelabel 이
+    이미 있으면 재추론(다운로드/inference) 없이 decide 만 재실행해 새 assessment 를 만든다
+    (policy_version 만 바뀐 재평가). find_prelabel_fn 미주입이면 항상 신규 추론(기존 동작).
+    """
+    stats = {"clips": len(clips), "ok": 0, "reused": 0, "failed": 0,
              "decisions": dict(_EMPTY_DECISIONS), "durations": []}
     with tempfile.TemporaryDirectory() as tmp:
         for c in clips:
             dest = Path(tmp) / f"{c.id}.mp4"
             try:
                 t0 = time.monotonic()
-                download_fn(c.r2_key, dest)
-                ga = assess_fn(str(dest), detector, policy, checkpoint_path, clip_id=c.id)
-                store_fn(sb, c, ga.result, ga.motion, ga.assessment, ga.provenance, producer)
-                stats["ok"] += 1
-                stats["decisions"][ga.assessment.decision] += 1
+                existing = (
+                    find_prelabel_fn(sb, c.id, model_version, SCHEMA_VERSION,
+                                     checkpoint_sha, policy.gate_threshold, SAMPLER_VERSION)
+                    if find_prelabel_fn is not None else None
+                )
+                if existing is not None:
+                    result, motion = reconstruct_fn(existing)
+                    assessment = decide(result, motion, policy)
+                    store_assessment_fn(sb, c.id, existing["id"], assessment, producer)
+                    stats["reused"] += 1
+                    stats["decisions"][assessment.decision] += 1
+                else:
+                    download_fn(c.r2_key, dest)
+                    ga = assess_fn(str(dest), detector, policy, checkpoint_path, clip_id=c.id)
+                    store_fn(sb, c, ga.result, ga.motion, ga.assessment, ga.provenance, producer)
+                    stats["ok"] += 1
+                    stats["decisions"][ga.assessment.decision] += 1
                 stats["durations"].append(time.monotonic() - t0)
             except Exception as e:  # noqa: BLE001 — clip 격리, batch 계속 (DB/R2/decode 오류)
                 stats["failed"] += 1
@@ -67,9 +95,21 @@ def process_batch(
     return stats
 
 
+# versioned policy presets — 모든 임계값이 version 에 묶인다(재현성·감사). config 는 어느 version 을 쓸지만 고른다.
+# activity-v0 = 최초 preflight 기준점(회귀 보존). activity-v1 = 0714 audit 반영(absent threshold↓ + static 민감도↑).
+_POLICY_PRESETS: dict[str, dict] = {
+    "activity-v0": {"gate_threshold": 0.25},
+    "activity-v1": {"gate_threshold": 0.10, "roi_flow_active": 0.5},
+}
+
+
 def _build_policy() -> ActivityPolicy:
-    """versioned policy 를 config 에서 주입 (임계값 코드 상수 금지, 지시문 §231)."""
-    return ActivityPolicy(version=config.ACTIVITY_POLICY_VERSION, gate_threshold=config.GATE_THRESHOLD)
+    """config 가 고른 policy version 의 preset 으로 ActivityPolicy 구성 (임계값 코드 상수 금지, §231)."""
+    version = config.ACTIVITY_POLICY_VERSION
+    preset = _POLICY_PRESETS.get(version)
+    if preset is None:
+        return ActivityPolicy(version=version, gate_threshold=config.GATE_THRESHOLD)  # 미등록 = config 폴백
+    return ActivityPolicy(version=version, **preset)
 
 
 def _acquire_lock():
@@ -97,7 +137,7 @@ def _log(now: datetime, cameras: int, stats: dict, policy: ActivityPolicy, model
     d = stats["decisions"]
     print(
         f"[activity] {now:%m-%d %H:%M} cameras={cameras} queried={stats['clips']} "
-        f"ok={stats['ok']} fail={stats['failed']} "
+        f"ok={stats['ok']} reused={stats.get('reused', 0)} fail={stats['failed']} "
         f"active={d['active']} absent={d['exclude_absent']} static={d['exclude_static']} unknown={d['unknown']} "
         f"avg={avg:.2f}s max={mx:.2f}s model={model_version} policy={policy.version}",
         flush=True,
@@ -120,9 +160,10 @@ def run(*, sb=None, now: datetime | None = None) -> int:
         policy = _build_policy()
         checkpoint = config.GATE_CHECKPOINT_PATH
         model_version = model_version_for(checkpoint)
+        ckpt_sha = checkpoint_sha256(checkpoint)
         start = now - timedelta(hours=config.ACTIVITY_WINDOW_HOURS)
         clips = list_unprocessed_clips(
-            sb, camera_ids, model_version, SCHEMA_VERSION, start, now, limit=config.ACTIVITY_BATCH_LIMIT
+            sb, camera_ids, policy.version, start, now, limit=config.ACTIVITY_BATCH_LIMIT
         )
         if not clips:
             print(f"[activity] {now:%m-%d %H:%M} cameras={len(camera_ids)} no unprocessed clips", flush=True)
@@ -132,6 +173,9 @@ def run(*, sb=None, now: datetime | None = None) -> int:
         stats = process_batch(
             sb, clips, detector, policy, checkpoint, producer,
             download_fn=r2.download_clip, assess_fn=assess_clip, store_fn=store_evidence_and_assessment,
+            find_prelabel_fn=find_prelabel, reconstruct_fn=reconstruct_evidence,
+            store_assessment_fn=store_assessment_only,
+            model_version=model_version, checkpoint_sha=ckpt_sha,
         )
         _log(now, len(camera_ids), stats, policy, model_version)
         return 0

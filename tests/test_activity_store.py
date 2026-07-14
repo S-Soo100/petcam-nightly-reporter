@@ -84,3 +84,25 @@ def test_new_policy_version_preserves_history():
     assert len(aa) == 2  # 두 policy_version 이력 보존, 덮어쓰지 않음
     assert {r["policy_version"] for r in aa} == {"pol-v0", "pol-v1"}
     assert len(sb.store["clip_prelabels"]) == 1  # evidence 는 그대로
+
+
+def test_different_threshold_makes_separate_evidence():
+    # 같은 clip 을 threshold 0.25 / 0.10 로 뽑은 evidence 는 identity 가 달라 별도 row (덮어쓰지 않음).
+    # audit 이 증명: 0.25=no_gecko, 0.10=gecko conf 0.14~0.21 → 둘 다 보존해야 비교 가능.
+    sb = FakeSB({})
+    prov_025 = GateProvenance("rf-detr-nano", "gecko_v2", "sha", 0.25, "samp-v1", "sv1", 12)
+    prov_010 = GateProvenance("rf-detr-nano", "gecko_v2", "sha", 0.10, "samp-v1", "sv1", 12)
+    store_evidence_and_assessment(sb, _clip(), _result(), _motion(), _assess(pv="p025"), prov_025, PROD)
+    store_evidence_and_assessment(sb, _clip(), _result(), _motion(), _assess(pv="p010"), prov_010, PROD)
+    assert len(sb.store["clip_prelabels"]) == 2
+    assert {r["threshold"] for r in sb.store["clip_prelabels"]} == {0.25, 0.10}
+
+
+def test_different_checkpoint_makes_separate_evidence():
+    # checkpoint sha256 이 다르면(재학습/다른 아티팩트) 별도 evidence.
+    sb = FakeSB({})
+    prov_a = GateProvenance("rf-detr-nano", "gecko_v2", "sha-A", 0.25, "samp-v1", "sv1", 12)
+    prov_b = GateProvenance("rf-detr-nano", "gecko_v2", "sha-B", 0.25, "samp-v1", "sv1", 12)
+    store_evidence_and_assessment(sb, _clip(), _result(), _motion(), _assess(pv="pa"), prov_a, PROD)
+    store_evidence_and_assessment(sb, _clip(), _result(), _motion(), _assess(pv="pb"), prov_b, PROD)
+    assert len(sb.store["clip_prelabels"]) == 2

@@ -20,6 +20,7 @@ class _Query:
         self._filters: list[tuple] = []
         self._order = None
         self._limit = None
+        self._range = None
         self._pending = None  # insert/upsert 가 반환할 row
 
     # --- read chain ---
@@ -48,6 +49,10 @@ class _Query:
 
     def limit(self, n):
         self._limit = n
+        return self
+
+    def range(self, start, end):
+        self._range = (int(start), int(end))  # supabase range 는 [start, end] 양끝 포함
         return self
 
     # --- write chain ---
@@ -88,7 +93,10 @@ class _Query:
         rows = [r for r in self._store.get(self._t, []) if self._match(r)]
         if self._order:
             rows = sorted(rows, key=lambda r: r.get(self._order))
-        if self._limit is not None:
+        if self._range is not None:
+            lo, hi = self._range
+            rows = rows[lo : hi + 1]
+        elif self._limit is not None:
             rows = rows[: self._limit]
         return _Result(rows)
 

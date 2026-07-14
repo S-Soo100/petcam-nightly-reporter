@@ -64,6 +64,7 @@ ACTIVITY_WINDOW_HOURS = float(os.environ.get("ACTIVITY_WINDOW_HOURS", "24"))
 ACTIVITY_BATCH_LIMIT = int(os.environ.get("ACTIVITY_BATCH_LIMIT", "200"))
 
 VLM_ROUTER_ENABLED = os.environ.get("VLM_ROUTER_ENABLED", "0") == "1"
+VLM_PROVIDER = os.environ.get("VLM_PROVIDER", "direct_api")
 VLM_SELECTOR_VERSION = "budget-router-v1"
 VLM_ACTIVITY_POLICY_VERSION = "activity-v1"
 VLM_MODEL = os.environ.get("ANTHROPIC_MODEL_EXACT", "claude-sonnet-5")

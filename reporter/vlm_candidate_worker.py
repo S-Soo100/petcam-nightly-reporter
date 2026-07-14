@@ -9,6 +9,7 @@ from botocore.exceptions import BotoCoreError,ClientError
 from supabase import create_client
 from reporter import config,r2
 from reporter.anthropic_analyzer import SYSTEM_PROMPT,analyze_clip
+from reporter.claude_cli_analyzer import CliBatchError,analyze_batch
 from reporter.timewin import trigger_window
 from reporter.vlm_budget import fair_job_order
 from reporter.vlm_candidate_indexer import load_recent_history,load_window_candidates,partition_eligibility
@@ -62,8 +63,59 @@ def _ledger(sb,now):
     actual=sum(float(r.get("cost_usd") or 0) for r in rows);reserved=sum(float(r.get("reserved_cost_usd") or 0) for r in rows if r.get("status") in {"submitted","failed_retryable"});return actual,reserved
 def _jobs(selected,run_id):
     ph=hashlib.sha256(SYSTEM_PROMPT.encode()).hexdigest();out=[]
-    for s in selected:out.append({"clip_id":s.clip.id,"slot":s.slot.value,"episode_key":s.episode_key,"rank_features":s.rank_features,"selection_reason":s.selection_reason,"activity_assessment_id":s.clip.assessment_id or "","prelabel_id":s.clip.prelabel_id or "","model_requested":config.VLM_MODEL,"prompt_version":config.VLM_PROMPT_VERSION,"prompt_sha256":ph,"sampler_version":config.VLM_SAMPLER_VERSION,"reserved_cost_usd":str(config.VLM_RESERVED_COST_USD),"pricing_version":"anthropic-sonnet5-intro-through-2026-08-31"})
+    cli=config.VLM_PROVIDER=="claude_cli_batch"
+    for s in selected:out.append({"clip_id":s.clip.id,"slot":s.slot.value,"episode_key":s.episode_key,"rank_features":s.rank_features,"selection_reason":s.selection_reason,"activity_assessment_id":s.clip.assessment_id or "","prelabel_id":s.clip.prelabel_id or "","model_requested":config.VLM_MODEL,"prompt_version":config.VLM_PROMPT_VERSION,"prompt_sha256":ph,"sampler_version":config.VLM_SAMPLER_VERSION,"reserved_cost_usd":"0" if cli else str(config.VLM_RESERVED_COST_USD),"pricing_version":"claude-code-subscription-v1" if cli else "anthropic-sonnet5-intro-through-2026-08-31"})
     return out
+
+
+def _split(total,count,index):
+    quotient,remainder=divmod(int(total),count)
+    return quotient+(1 if index<remainder else 0)
+
+
+def process_cli_jobs(sb,jobs,*,analyzer=analyze_batch,download_fn=r2.download_clip,extract_fn=extract_six):
+    stats=defaultdict(int);groups=defaultdict(list)
+    for job in fair_job_order(jobs):groups[(job["selector_run_id"],job["camera_id"])].append(job)
+    with tempfile.TemporaryDirectory() as tmp:
+        for batch in groups.values():
+            submitted=[];frames={}
+            for job in batch[:config.VLM_MAX_PER_CAMERA_WINDOW]:
+                try:
+                    if not mark_submitted(sb,job,_month_start(datetime.now(timezone.utc)).isoformat(),config.VLM_MONTHLY_BUDGET_USD):
+                        stats["held"]+=1;continue
+                    submitted.append(job)
+                    clip=sb.table("motion_clips").select("id,r2_key").eq("id",job["clip_id"]).execute().data[0]
+                    mp4=download_fn(clip["r2_key"],Path(tmp)/f"{job['clip_id']}.mp4")
+                    frames[job["clip_id"]]=extract_fn(mp4,Path(tmp)/job["clip_id"])
+                except Exception as exc:
+                    status=failure_status(job);update_job(sb,job["id"],{"status":status,"error_code":type(exc).__name__});stats[status]+=1
+            ready=[job for job in submitted if job["clip_id"] in frames]
+            if not ready:continue
+            try:
+                result=analyzer(frames,config.VLM_MODEL)
+            except CliBatchError as exc:
+                for job in ready:
+                    status=failure_status(job);update_job(sb,job["id"],{"status":status,"error_code":str(exc).split(":",1)[0]});stats[status]+=1
+                break
+            count=len(ready)
+            for index,job in enumerate(ready):
+                classification=result.results.get(job["clip_id"],{})
+                values={
+                    "status":"held_model_mismatch" if result.model_mismatch else "succeeded",
+                    "model_actual":result.model_actual,
+                    "provider_request_id":result.provider_request_id,
+                    "result":{**classification,"provider":"claude_cli_batch","provider_estimated_cost_usd":result.provider_estimated_cost_usd/count},
+                    "frames_sampled":6,
+                    "input_tokens":_split(result.usage.input_tokens,count,index),
+                    "cache_creation_input_tokens":_split(result.usage.cache_creation_input_tokens,count,index),
+                    "cache_read_input_tokens":_split(result.usage.cache_read_input_tokens,count,index),
+                    "output_tokens":_split(result.usage.output_tokens,count,index),
+                    "cost_usd":"0",
+                    "completed_at":datetime.now(timezone.utc).isoformat(),
+                }
+                update_job(sb,job["id"],values);stats[values["status"]]+=1
+            if result.model_mismatch:break
+    return dict(stats)
 def process_jobs(sb,jobs,client):
     stats=defaultdict(int);streak=0
     with tempfile.TemporaryDirectory() as tmp:
@@ -101,6 +153,8 @@ def run(*,sb=None,now=None,enabled=None,client=None):
         for cam in sorted(groups):
             reasons,reps=contexts[cam];selected=capped[cam]
             runrow={"camera_id":cam,"window_start":start.isoformat(),"window_end":end.isoformat(),"selector_version":config.VLM_SELECTOR_VERSION,"clips_seen":len(groups[cam]),"hard_invalid_count":reasons.get("invalid_input",0),"already_processed_count":sum(v for k,v in reasons.items() if k!="invalid_input"),"episode_count":len(reps),"pool_counts":{},"selected_clip_ids":[s.clip.id for s in selected],"unselected_reason_counts":reasons,"monthly_budget_usd":str(config.VLM_MONTHLY_BUDGET_USD),"month_reserved_usd":str(reserved),"month_actual_usd":str(actual),"producer_host":socket.gethostname(),"producer_run_id":f"{now:%Y%m%dT%H%M%S}"};create_run_and_jobs(sb,runrow,_jobs(selected,runrow["producer_run_id"]))
-        stats=process_jobs(sb,load_due_jobs(sb,config.VLM_MAX_PER_NIGHT),client or Anthropic());print(f"[vlm-router] window={start.isoformat()}..{end.isoformat()} clips={len(clips)} stats={stats}");return 0
+        due=load_due_jobs(sb,config.VLM_MAX_PER_NIGHT)
+        stats=process_cli_jobs(sb,due) if config.VLM_PROVIDER=="claude_cli_batch" else process_jobs(sb,due,client or Anthropic())
+        print(f"[vlm-router] provider={config.VLM_PROVIDER} window={start.isoformat()}..{end.isoformat()} clips={len(clips)} stats={stats}");return 0
     finally:fcntl.flock(lock,fcntl.LOCK_UN);lock.close()
 if __name__=="__main__":raise SystemExit(run())

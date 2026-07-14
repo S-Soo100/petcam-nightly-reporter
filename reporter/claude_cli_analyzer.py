@@ -89,7 +89,12 @@ def analyze_batch(frame_sets, model, *, runner=subprocess.run) -> CliBatchResult
         "--output-format", "json",
         "--json-schema", json.dumps(_SCHEMA, separators=(",", ":")),
     ]
-    completed = runner(command, capture_output=True, text=True, timeout=300)
+    try:
+        completed = runner(command, capture_output=True, text=True, timeout=300)
+    except subprocess.TimeoutExpired as exc:
+        raise CliBatchError("provider_error: timeout") from exc
+    except (FileNotFoundError, subprocess.SubprocessError) as exc:
+        raise CliBatchError(f"provider_error: {type(exc).__name__}") from exc
     if completed.returncode != 0:
         raise CliBatchError(f"provider_error: cli_rc_{completed.returncode}")
     try:

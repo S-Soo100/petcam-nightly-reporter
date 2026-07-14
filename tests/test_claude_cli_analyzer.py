@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -91,3 +92,11 @@ def test_cli_batch_requires_one_to_four_clips_and_six_frames(tmp_path):
     bad = {"a": five["a"][:5]}
     with pytest.raises(ValueError, match="six frames"):
         analyze_batch(bad, "claude-sonnet-5")
+
+
+def test_cli_batch_normalizes_timeout_as_provider_error(tmp_path):
+    def timeout(command, **_kwargs):
+        raise subprocess.TimeoutExpired(command, 300)
+
+    with pytest.raises(CliBatchError, match="provider_error: timeout"):
+        analyze_batch(_frames(tmp_path), "claude-sonnet-5", runner=timeout)

@@ -1,7 +1,9 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from tests._fakes import FakeSB
-from reporter.vlm_candidate_worker import cap_night_selections, failure_status, run
+from reporter.claude_cli_analyzer import CliBatchResult
+from reporter.vlm_budget import Usage
+from reporter.vlm_candidate_worker import cap_night_selections, failure_status, process_cli_jobs, run
 from reporter.vlm_models import CandidateClip, SelectedCandidate, Slot
 
 def test_disabled_worker_does_not_touch_db():
@@ -28,3 +30,55 @@ def test_failure_status_allows_exactly_two_attempts():
     assert failure_status({"attempt_count":0})=="failed_retryable"
     assert failure_status({"attempt_count":1})=="failed_terminal"
     assert failure_status({"attempt_count":2})=="failed_terminal"
+
+
+def test_cli_provider_batches_four_jobs_and_splits_usage(tmp_path):
+    jobs=[]; clips=[]
+    for index in range(4):
+        clip_id=f"c{index}"
+        jobs.append({"id":f"j{index}","clip_id":clip_id,"camera_id":"cam","selector_run_id":"run","slot":list(Slot)[index].value,"status":"queued","attempt_count":0})
+        clips.append({"id":clip_id,"camera_id":"cam","started_at":"2026-07-15T13:00:00+00:00","duration_sec":30,"r2_key":f"{clip_id}.mp4","motion_score":1,"width":1280,"height":720})
+    sb=FakeSB({"clip_vlm_jobs":jobs,"motion_clips":clips})
+    calls=[]
+
+    def analyzer(frame_sets, model):
+        calls.append(set(frame_sets))
+        results={clip_id:{"clip_id":clip_id,"action":"moving","confidence":.8,"reasoning":"moves"} for clip_id in frame_sets}
+        return CliBatchResult("session","claude-sonnet-5","claude-sonnet-5",results,Usage(101,41,31,21),.12,False)
+
+    stats=process_cli_jobs(
+        sb,jobs,analyzer=analyzer,
+        download_fn=lambda _key,dest: dest,
+        extract_fn=lambda _video,out: [out/f"{i}.jpg" for i in range(6)],
+    )
+    assert len(calls)==1 and calls[0]=={"c0","c1","c2","c3"}
+    assert stats=={"succeeded":4}
+    stored=sb.store["clip_vlm_jobs"]
+    assert sum(row["input_tokens"] for row in stored)==101
+    assert sum(row["output_tokens"] for row in stored)==21
+    assert all(row["cost_usd"]=="0" for row in stored)
+    assert all(row["result"]["provider"]=="claude_cli_batch" for row in stored)
+
+
+def test_cli_provider_keeps_processing_when_one_clip_download_fails(tmp_path):
+    jobs=[
+        {"id":"j0","clip_id":"c0","camera_id":"cam","selector_run_id":"run","slot":Slot.CUSTOMER_HIGHLIGHT.value,"status":"queued","attempt_count":0},
+        {"id":"j1","clip_id":"c1","camera_id":"cam","selector_run_id":"run","slot":Slot.SUBTLE_BEHAVIOR.value,"status":"queued","attempt_count":0},
+    ]
+    clips=[{"id":clip_id,"r2_key":f"{clip_id}.mp4"} for clip_id in ("c0","c1")]
+    sb=FakeSB({"clip_vlm_jobs":jobs,"motion_clips":clips})
+
+    def download(key,dest):
+        if key=="c0.mp4":raise OSError("broken")
+        return dest
+
+    def analyzer(frame_sets,model):
+        assert set(frame_sets)=={"c1"}
+        item={"clip_id":"c1","action":"moving","confidence":.8,"reasoning":"moves"}
+        return CliBatchResult("session",model,model,{"c1":item},Usage(10,0,0,2),.01,False)
+
+    stats=process_cli_jobs(
+        sb,jobs,analyzer=analyzer,download_fn=download,
+        extract_fn=lambda _video,out:[out/f"{i}.jpg" for i in range(6)],
+    )
+    assert stats=={"failed_retryable":1,"succeeded":1}

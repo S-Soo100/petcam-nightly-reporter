@@ -10,5 +10,7 @@ __pycache__/
 # 로컬 임시 (clip 다운로드/프레임)
 /tmp/
 tmp/
+/storage/
+.worktrees/
 
 .DS_Store

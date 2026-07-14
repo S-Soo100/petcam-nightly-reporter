@@ -71,7 +71,9 @@
   `claude_cli_batch`, 모델은 exact `claude-sonnet-5`다.
 - 첫 canary는 00~02시 44개 clip 중 4개만 선택했고 4/4 성공했다. 요청 모델과 실제 모델이
   모두 Sonnet 5였고 `cost_usd=0`, `reserved_cost_usd=0`,
-  `pricing_version=claude-code-subscription-v1`을 확인했다.
+  `pricing_version=claude-code-subscription-v1`을 확인했다. 네 결과는 모두 `moving`이었고,
+  구독 청구와 별개인 API 환산 비용은 batch 1회 약 `$0.530825`였다. 따라서 파이프라인 가동은
+  검증됐지만 후보 utility와 구독 한도 효율은 1박 이상 관찰해야 한다.
 - 결과는 `clip_vlm_selector_runs`/`clip_vlm_jobs`에만 저장한다. 앱 하이라이트,
   `behavior_logs`, `camera_clips`, 활동시간에는 반영하지 않는다.
 - launchd 강제 smoke는 이미 처리한 동일 창을 재호출하지 않고 `stats={}`, exit 0으로 끝났다.

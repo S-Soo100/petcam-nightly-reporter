@@ -54,6 +54,7 @@ def process_batch(
     store_assessment_fn=None,
     model_version: str = "",
     checkpoint_sha: str = "",
+    num_frames: int = 12,
 ) -> dict:
     """clip 리스트를 순차 처리. 한 clip 실패는 batch 를 멈추지 않는다(격리). 반환 stats.
 
@@ -70,7 +71,7 @@ def process_batch(
                 t0 = time.monotonic()
                 existing = (
                     find_prelabel_fn(sb, c.id, model_version, SCHEMA_VERSION,
-                                     checkpoint_sha, policy.gate_threshold, SAMPLER_VERSION)
+                                     checkpoint_sha, policy.gate_threshold, SAMPLER_VERSION, num_frames)
                     if find_prelabel_fn is not None else None
                 )
                 if existing is not None:

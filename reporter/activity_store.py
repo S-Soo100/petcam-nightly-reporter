@@ -48,12 +48,13 @@ def store_evidence_and_assessment(
         "producer_host": producer.host,
         "producer_run_id": producer.run_id,
     }
-    # evidence identity = clip + 아티팩트(checkpoint sha256/model_version) + threshold + sampler + schema.
+    # evidence identity = clip + 아티팩트(checkpoint sha256/model_version) + threshold + sampler(version+frames) + schema.
     # threshold 를 identity 에 넣어야 0.25/0.10 evidence 가 덮이지 않고 둘 다 보존된다(audit 교훈).
+    # frames_sampled 도 sampler config 의 일부(샘플 수가 다르면 다른 입력 → 다른 evidence).
     prow = (
         sb.table("clip_prelabels")
         .upsert(prelabel_row,
-                on_conflict="clip_id,model_version,schema_version,checkpoint_sha256,threshold,sampler_version")
+                on_conflict="clip_id,model_version,schema_version,checkpoint_sha256,threshold,sampler_version,frames_sampled")
         .execute()
         .data
     )
@@ -85,8 +86,9 @@ def find_prelabel(
     checkpoint_sha256: str,
     threshold: float,
     sampler_version: str,
+    frames_sampled: int,
 ) -> dict | None:
-    """evidence identity 로 기존 prelabel 조회 (policy reuse: 재추론 스킵 판단용). 없으면 None."""
+    """evidence identity(7컬럼) 로 기존 prelabel 조회 (policy reuse: 재추론 스킵 판단용). 없으면 None."""
     rows = (
         sb.table("clip_prelabels")
         .select("*")
@@ -96,6 +98,7 @@ def find_prelabel(
         .eq("checkpoint_sha256", checkpoint_sha256)
         .eq("threshold", threshold)
         .eq("sampler_version", sampler_version)
+        .eq("frames_sampled", frames_sampled)
         .execute()
         .data
     )

@@ -106,3 +106,14 @@ def test_different_checkpoint_makes_separate_evidence():
     store_evidence_and_assessment(sb, _clip(), _result(), _motion(), _assess(pv="pa"), prov_a, PROD)
     store_evidence_and_assessment(sb, _clip(), _result(), _motion(), _assess(pv="pb"), prov_b, PROD)
     assert len(sb.store["clip_prelabels"]) == 2
+
+
+def test_different_frames_sampled_makes_separate_evidence():
+    # sampler config = sampler_version + frames_sampled. 샘플 수가 다르면 별도 evidence(다른 입력).
+    sb = FakeSB({})
+    prov_12 = GateProvenance("rf-detr-nano", "gecko_v2", "sha", 0.25, "samp-v1", "sv1", 12)
+    prov_20 = GateProvenance("rf-detr-nano", "gecko_v2", "sha", 0.25, "samp-v1", "sv1", 20)
+    store_evidence_and_assessment(sb, _clip(), _result(), _motion(), _assess(pv="p12"), prov_12, PROD)
+    store_evidence_and_assessment(sb, _clip(), _result(), _motion(), _assess(pv="p20"), prov_20, PROD)
+    assert len(sb.store["clip_prelabels"]) == 2
+    assert {r["frames_sampled"] for r in sb.store["clip_prelabels"]} == {12, 20}

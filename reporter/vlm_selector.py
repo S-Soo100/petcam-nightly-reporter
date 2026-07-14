@@ -16,7 +16,9 @@ def select_candidates(reps,history,window_start):
     bg_med=statistics.median([_m(r.clip,"global_bg_change") for r in reps]) if reps else 0
     for slot in ORDER:
         if slot is Slot.CUSTOMER_HIGHLIGHT:
-            pool=[r for r in remaining if r.clip.activity_decision=="active" or r.clip.prelabel_id]
+            # prelabel 존재 자체는 활동 근거가 아니다. absent/static evidence도 prelabel을 가지므로
+            # customer highlight에는 activity policy가 active인 episode만 넣는다.
+            pool=[r for r in remaining if r.clip.activity_decision=="active"]
             score=lambda r:(r.clip.activity_decision=="active",_m(r.clip,"roi_flow_mag"),_m(r.clip,"max_bbox_center_disp"),-history.get(_bucket(r),0),r.clip.motion_score)
         elif slot is Slot.SUBTLE_BEHAVIOR:
             pool=[r for r in remaining if r.clip.gecko_bbox and _m(r.clip,"global_bg_change")<=bg_med and _m(r.clip,"roi_flow_mag")>=roi_med]

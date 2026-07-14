@@ -3,7 +3,9 @@ from collections import defaultdict
 from datetime import datetime,timedelta,timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
-from anthropic import Anthropic,APIConnectionError,InternalServerError,RateLimitError
+from anthropic import (Anthropic,APIConnectionError,AuthenticationError,BadRequestError,
+                       InternalServerError,PermissionDeniedError,RateLimitError)
+from botocore.exceptions import BotoCoreError,ClientError
 from supabase import create_client
 from reporter import config,r2
 from reporter.anthropic_analyzer import SYSTEM_PROMPT,analyze_clip
@@ -11,11 +13,44 @@ from reporter.timewin import trigger_window
 from reporter.vlm_budget import fair_job_order
 from reporter.vlm_candidate_indexer import load_recent_history,load_window_candidates,partition_eligibility
 from reporter.vlm_episode import reduce_episodes
-from reporter.vlm_frames import extract_six
+from reporter.vlm_frames import FrameExtractionError,extract_six
 from reporter.vlm_selector import select_candidates
 from reporter.vlm_store import create_run_and_jobs,load_due_jobs,mark_submitted,update_job
 
 LOCK="/tmp/petcam-vlm-candidate-worker.lock"
+
+
+def cap_night_selections(selected_by_camera, camera_counts, global_remaining):
+    """슬롯 우선 round-robin으로 global/camera 야간 상한을 함께 강제한다."""
+    out={camera_id:[] for camera_id in selected_by_camera}
+    remaining_by_camera={camera_id:max(0,config.VLM_MAX_PER_CAMERA_NIGHT-camera_counts.get(camera_id,0)) for camera_id in selected_by_camera}
+    for slot in ("customer_highlight","subtle_behavior","diversity_discovery","exclusion_audit"):
+        for camera_id in sorted(selected_by_camera):
+            if global_remaining<=0:return out
+            if remaining_by_camera[camera_id]<=0:continue
+            item=next((x for x in selected_by_camera[camera_id] if x.slot.value==slot),None)
+            if item is None:continue
+            out[camera_id].append(item);remaining_by_camera[camera_id]-=1;global_remaining-=1
+    return out
+
+
+def failure_status(job):
+    """RPC가 현재 attempt를 +1 하기 전 읽은 row 기준으로 총 2회만 허용한다."""
+    return "failed_retryable" if int(job.get("attempt_count") or 0)==0 else "failed_terminal"
+
+
+def _night_bounds(window_end):
+    local=window_end.astimezone(ZoneInfo("Asia/Seoul"))
+    day=local.date() if local.hour>=20 else (local-timedelta(days=1)).date()
+    start=datetime.combine(day,datetime.min.time(),ZoneInfo("Asia/Seoul")).replace(hour=20)
+    return start.astimezone(timezone.utc),(start+timedelta(hours=8)).astimezone(timezone.utc)
+
+
+def _night_counts(sb,night_start,night_end):
+    rows=sb.table("clip_vlm_jobs").select("camera_id").gte("window_start",night_start.isoformat()).lt("window_start",night_end.isoformat()).execute().data
+    counts=defaultdict(int)
+    for row in rows:counts[row["camera_id"]]+=1
+    return len(rows),dict(counts)
 def _lock():
     f=open(LOCK,"w")
     try:fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB);return f
@@ -42,8 +77,10 @@ def process_jobs(sb,jobs,client):
                 mp4=r2.download_clip(c.r2_key,Path(tmp)/f"{c.id}.mp4");paths=extract_six(mp4,Path(tmp)/c.id);res=analyze_clip(client,paths,c,config.VLM_MODEL)
                 vals={"status":"held_model_mismatch" if res.model_mismatch else "succeeded","model_actual":res.model_actual,"provider_request_id":res.provider_request_id,"result":res.result,"frames_sampled":6,"input_tokens":res.usage.input_tokens,"cache_creation_input_tokens":res.usage.cache_creation_input_tokens,"cache_read_input_tokens":res.usage.cache_read_input_tokens,"output_tokens":res.usage.output_tokens,"cost_usd":str(res.cost_usd),"completed_at":datetime.now(timezone.utc).isoformat()};update_job(sb,job["id"],vals);stats[vals["status"]]+=1;streak=0
                 if res.model_mismatch:break
-            except (APIConnectionError,InternalServerError,RateLimitError) as e:
-                streak+=1;status="failed_retryable" if job.get("attempt_count",0)<2 else "failed_terminal";update_job(sb,job["id"],{"status":status,"error_code":type(e).__name__});stats[status]+=1
+            except (APIConnectionError,InternalServerError,RateLimitError,BotoCoreError,ClientError,FrameExtractionError) as e:
+                streak+=1;status=failure_status(job);update_job(sb,job["id"],{"status":status,"error_code":type(e).__name__});stats[status]+=1
+            except (AuthenticationError,PermissionDeniedError,BadRequestError) as e:
+                update_job(sb,job["id"],{"status":"failed_terminal","error_code":type(e).__name__});stats["failed_terminal"]+=1;break
             except Exception as e:
                 update_job(sb,job["id"],{"status":"failed_terminal","error_code":type(e).__name__});stats["failed_terminal"]+=1;print(f"[vlm-router] {job['clip_id'][:8]} {type(e).__name__}",file=sys.stderr)
     return dict(stats)
@@ -55,9 +92,15 @@ def run(*,sb=None,now=None,enabled=None,client=None):
     try:
         sb=sb or create_client(config.SUPABASE_URL,config.SUPABASE_KEY);actual,reserved=_ledger(sb,now);clips=load_window_candidates(sb,start,end,config.VLM_ACTIVITY_POLICY_VERSION,config.VLM_SELECTOR_VERSION);groups=defaultdict(list)
         for c in clips:groups[c.camera_id].append(c)
+        contexts={};selected_by_camera={}
         for cam in sorted(groups):
-            eligible,reasons=partition_eligibility(groups[cam]);reps=reduce_episodes(eligible,start);history=load_recent_history(sb,cam,now-timedelta(days=7));selected=select_candidates(reps,history,start)[:4]
+            eligible,reasons=partition_eligibility(groups[cam]);reps=reduce_episodes(eligible,start);history=load_recent_history(sb,cam,now-timedelta(days=7));selected=select_candidates(reps,history,start)[:config.VLM_MAX_PER_CAMERA_WINDOW]
+            contexts[cam]=(reasons,reps);selected_by_camera[cam]=selected
+        night_start,night_end=_night_bounds(end);night_total,camera_counts=_night_counts(sb,night_start,night_end)
+        capped=cap_night_selections(selected_by_camera,camera_counts,max(0,config.VLM_MAX_PER_NIGHT-night_total))
+        for cam in sorted(groups):
+            reasons,reps=contexts[cam];selected=capped[cam]
             runrow={"camera_id":cam,"window_start":start.isoformat(),"window_end":end.isoformat(),"selector_version":config.VLM_SELECTOR_VERSION,"clips_seen":len(groups[cam]),"hard_invalid_count":reasons.get("invalid_input",0),"already_processed_count":sum(v for k,v in reasons.items() if k!="invalid_input"),"episode_count":len(reps),"pool_counts":{},"selected_clip_ids":[s.clip.id for s in selected],"unselected_reason_counts":reasons,"monthly_budget_usd":str(config.VLM_MONTHLY_BUDGET_USD),"month_reserved_usd":str(reserved),"month_actual_usd":str(actual),"producer_host":socket.gethostname(),"producer_run_id":f"{now:%Y%m%dT%H%M%S}"};create_run_and_jobs(sb,runrow,_jobs(selected,runrow["producer_run_id"]))
-        stats=process_jobs(sb,load_due_jobs(sb,64),client or Anthropic());print(f"[vlm-router] window={start.isoformat()}..{end.isoformat()} clips={len(clips)} stats={stats}");return 0
+        stats=process_jobs(sb,load_due_jobs(sb,config.VLM_MAX_PER_NIGHT),client or Anthropic());print(f"[vlm-router] window={start.isoformat()}..{end.isoformat()} clips={len(clips)} stats={stats}");return 0
     finally:fcntl.flock(lock,fcntl.LOCK_UN);lock.close()
 if __name__=="__main__":raise SystemExit(run())

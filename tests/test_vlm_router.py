@@ -40,6 +40,12 @@ def test_four_slots_are_unique_and_audit_keeps_exclusions():
     assert any(s.slot is Slot.EXCLUSION_AUDIT and s.clip.activity_decision.startswith("exclude") for s in selected)
 
 
+def test_absent_prelabel_is_not_promoted_to_customer_highlight():
+    clips=[clip("absent",0,decision="exclude_absent")]
+    selected=select_candidates(reduce_episodes(clips,clips[0].started_at),{},clips[0].started_at)
+    assert all(s.slot is not Slot.CUSTOMER_HIGHLIGHT for s in selected)
+
+
 def test_cost_and_fair_order():
     assert calculate_cost(Usage(7000,3000,2000,100))==Decimal("0.022900")
     jobs=[{"camera_id":"a","slot":"subtle_behavior"},{"camera_id":"b","slot":"customer_highlight"},{"camera_id":"a","slot":"customer_highlight"}]

@@ -1,5 +1,6 @@
 """워커 전역 설정. .env 는 이 패키지 부모(레포 루트)에서 로드."""
 import os
+from decimal import Decimal
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -61,3 +62,12 @@ GATE_THRESHOLD = float(os.environ.get("GATE_THRESHOLD", "0.25"))
 ACTIVITY_POLICY_VERSION = os.environ.get("ACTIVITY_POLICY_VERSION", "activity-v0")
 ACTIVITY_WINDOW_HOURS = float(os.environ.get("ACTIVITY_WINDOW_HOURS", "24"))
 ACTIVITY_BATCH_LIMIT = int(os.environ.get("ACTIVITY_BATCH_LIMIT", "200"))
+
+VLM_ROUTER_ENABLED = os.environ.get("VLM_ROUTER_ENABLED", "0") == "1"
+VLM_SELECTOR_VERSION = "budget-router-v1"
+VLM_ACTIVITY_POLICY_VERSION = "activity-v1"
+VLM_MODEL = os.environ.get("ANTHROPIC_MODEL_EXACT", "claude-sonnet-5")
+VLM_PROMPT_VERSION = "v4.0-direct-images"
+VLM_SAMPLER_VERSION = "six-768q85-v1"
+VLM_MONTHLY_BUDGET_USD = Decimal(os.environ.get("VLM_MONTHLY_BUDGET_USD", "10.00"))
+VLM_RESERVED_COST_USD = Decimal(os.environ.get("VLM_RESERVED_COST_USD", "0.10"))

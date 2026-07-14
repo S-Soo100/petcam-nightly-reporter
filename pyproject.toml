@@ -12,6 +12,7 @@ dependencies = [
     # 활동필터 worker 가 Gate(RF-DETR) 를 같은 프로세스에서 재사용(subprocess/모델 재로드 금지,
     # 지시문 §135). 로컬 editable path — 절대경로 하드코딩 아님(D4). 두 레포는 형제 위치.
     "gecko-vision-gate",
+    "anthropic>=0.116.0",
 ]
 
 [dependency-groups]

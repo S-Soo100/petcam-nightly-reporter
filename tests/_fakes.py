@@ -86,8 +86,16 @@ class _Query:
         self._pending = out
         return self
 
+    def update(self, row):
+        self._pending = ("update", dict(row))
+        return self
+
     # --- terminal ---
     def execute(self):
+        if isinstance(self._pending, tuple) and self._pending[0] == "update":
+            rows = [r for r in self._store.get(self._t, []) if self._match(r)]
+            for r in rows: r.update(self._pending[1])
+            return _Result(rows)
         if self._pending is not None:
             return _Result(self._pending)
         rows = [r for r in self._store.get(self._t, []) if self._match(r)]
@@ -122,3 +130,21 @@ class FakeSB:
 
     def table(self, name: str):
         return _Query(name, self.store)
+
+    def rpc(self, name, args):
+        if name == "fn_create_clip_vlm_selector_run":
+            run=dict(args["p_run"]); runs=self.store.setdefault("clip_vlm_selector_runs",[])
+            hit=next((r for r in runs if (r.get("camera_id"),r.get("window_start"),r.get("selector_version"))==(run.get("camera_id"),run.get("window_start"),run.get("selector_version"))),None)
+            if hit is None:run["id"]=f"clip_vlm_selector_runs-{len(runs)}";runs.append(run);hit=run
+            jobs=self.store.setdefault("clip_vlm_jobs",[])
+            for j in args["p_jobs"]:
+                if not any(x.get("clip_id")==j.get("clip_id") and x.get("selector_version")==run.get("selector_version") for x in jobs):
+                    row={**j,"id":f"clip_vlm_jobs-{len(jobs)}","selector_run_id":hit["id"],"camera_id":run["camera_id"],"selector_version":run["selector_version"],"status":"queued","attempt_count":0};jobs.append(row)
+            return _RpcResult(hit["id"])
+        if name == "fn_reserve_clip_vlm_job":
+            job=next(x for x in self.store.get("clip_vlm_jobs",[]) if x["id"]==args["p_job_id"]);job["status"]="submitted";job["attempt_count"]+=1;return _RpcResult(True)
+        raise KeyError(name)
+
+class _RpcResult:
+    def __init__(self,data):self.data=data
+    def execute(self):return self

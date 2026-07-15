@@ -56,6 +56,13 @@ def test_format_no_behavior_but_success_no_alert():
     assert "⚠️" not in msg
 
 
+def test_format_sampled_zero_shows_vlm_sampling_off():
+    # SAMPLE_TOP_N=0 등 VLM 샘플링이 꺼진 창은 '특이행동 없음'(분석 결론)으로 오해되면 안 된다.
+    msg = _format(_activity(), _beh(0, 0), _NOW)
+    assert "샘플0: VLM 샘플링 꺼짐" in msg
+    assert "특이행동 없음" not in msg
+
+
 def test_format_no_clips_short_circuit():
     empty = {"clip_count": 0, "active_minutes": 0.0, "peak_hour_kst": None, "hourly_kst": {}}
     msg = _format(empty, _beh(0, 0), _NOW)

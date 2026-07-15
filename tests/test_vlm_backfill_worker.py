@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -6,11 +7,14 @@ from reporter.vlm_backfill_gate import GateEnrichment
 from reporter.vlm_backfill_selector import BACKFILL_SELECTOR_VERSION, bucket_plans, source_nights
 from reporter.vlm_backfill_worker import (
     InsufficientCandidates,
+    backfill_allowed_now,
     choose_target_camera,
     next_source_date,
     prepare_wave,
     run,
 )
+
+_KST = ZoneInfo("Asia/Seoul")
 from reporter.vlm_models import CandidateClip, SelectedCandidate
 from tests._fakes import FakeSB
 
@@ -69,6 +73,28 @@ def _jobs_for_day(day, *, count: int, status: str = "succeeded", completed_at: d
     return rows
 
 
+def test_backfill_allowed_only_between_07_and_20_kst():
+    for hour, minute in [(7, 0), (12, 0), (19, 59)]:
+        assert backfill_allowed_now(datetime(2026, 7, 15, hour, minute, tzinfo=_KST)) is True
+    for hour, minute in [(20, 0), (22, 0), (0, 0), (4, 0), (6, 59)]:
+        assert backfill_allowed_now(datetime(2026, 7, 15, hour, minute, tzinfo=_KST)) is False
+
+
+def test_backfill_allowed_converts_utc_to_kst():
+    assert backfill_allowed_now(datetime(2026, 7, 15, 3, tzinfo=timezone.utc)) is True   # KST 12:00
+    assert backfill_allowed_now(datetime(2026, 7, 15, 13, tzinfo=timezone.utc)) is False  # KST 22:00
+
+
+def test_backfill_night_run_is_noop_before_lock_or_db():
+    def boom(*_args, **_kwargs):
+        raise AssertionError("night backfill must no-op before lock/DB/Gate/Claude")
+    assert run(
+        now=datetime(2026, 7, 15, 22, tzinfo=_KST),
+        acquire_vlm_lock_fn=boom, release_vlm_lock_fn=boom,
+        acquire_activity_lock_fn=boom, process_fn=boom, prepare_fn=boom,
+    ) == 0
+
+
 def test_target_camera_is_largest_without_hardcoded_uuid():
     start = bucket_plans(source_nights()[0])[0].start
     rows = [_motion_clip(f"a-{i}", "camera-a", start + timedelta(minutes=i)) for i in range(5)]
@@ -117,17 +143,23 @@ def test_next_wave_waits_55_minutes_after_manual_canary():
     assert next_source_date(sb, "camera-a", completed + timedelta(minutes=55)) == source_nights()[1]
 
 
-def test_regular_due_jobs_defer_backfill_wave():
+def test_backfill_never_drains_regular_selector_jobs():
+    # 새 계약(§7.2): backfill worker 는 정규 selector job 을 절대 소비하지 않는다.
+    # (구계약은 regular-first drain 이었고 이 테스트가 그 회귀를 막는다.)
+    start = bucket_plans(source_nights()[0])[0].start
     regular = {"id": "regular", "selector_version": "budget-router-v1", "status": "queued", "queued_at": "2026-07-15T00:00:00+00:00"}
-    sb = FakeSB({"clip_vlm_jobs": [regular]})
+    sb = FakeSB({"clip_vlm_jobs": [regular], "motion_clips": [_motion_clip("a", "camera-a", start)]})
     calls = []
     assert run(
         sb=sb,
-        process_fn=lambda _sb, jobs: calls.append([job["id"] for job in jobs]) or {"succeeded": 1},
+        now=datetime(2026, 7, 15, 2, tzinfo=timezone.utc),
+        process_fn=lambda _sb, jobs: calls.append([job["id"] for job in jobs]) or {"succeeded": len(jobs)},
         acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
-        prepare_fn=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("must defer")),
+        acquire_activity_lock_fn=lambda: None,  # prepare 직전 defer — regular 이 새지 않는지만 검증
+        prepare_fn=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("must not build wave")),
     ) == 0
-    assert calls == [["regular"]]
+    assert calls == []  # 정규 job 은 backfill process_fn 에 넘어가지 않음
+    assert sb.store["clip_vlm_jobs"][0]["status"] == "queued"  # 정규 queue 불변
 
 
 def test_activity_worker_lock_defers_gate_prepool():
@@ -156,6 +188,7 @@ def test_previous_quota_error_blocks_future_backfill_wave():
     })
     assert run(
         sb=sb,
+        now=datetime(2026, 7, 15, 11, tzinfo=_KST),
         acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
         prepare_fn=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("must remain blocked")),
     ) == 0
@@ -168,6 +201,7 @@ def test_existing_30_job_wave_resumes_without_gate_or_reselection():
     calls = []
     assert run(
         sb=sb,
+        now=datetime(2026, 7, 15, 11, tzinfo=_KST),
         process_fn=lambda _sb, due: calls.append([job["id"] for job in due]) or {"succeeded": len(due)},
         acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
         prepare_fn=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("resume must not reselect")),
@@ -183,6 +217,7 @@ def test_partial_persisted_wave_fails_closed_instead_of_adding_jobs():
     sb = FakeSB({"motion_clips": [_motion_clip("a", "camera-a", start)], "clip_vlm_jobs": jobs})
     assert run(
         sb=sb,
+        now=datetime(2026, 7, 15, 11, tzinfo=_KST),
         acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
         prepare_fn=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("partial wave must fail closed")),
     ) == 0

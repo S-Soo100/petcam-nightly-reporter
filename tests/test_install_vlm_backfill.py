@@ -4,12 +4,14 @@ import subprocess
 from pathlib import Path
 
 
-def test_backfill_installer_is_hourly_subscription_only_and_shadow_safe():
+def test_backfill_installer_is_daytime_calendar_subscription_only_and_shadow_safe():
+    # 새 계약(§7.2): RunAtLoad/StartInterval 제거, 07~19시 정각 calendar 만 — 정규 야간 lock 경합 차단.
     script = Path("install-launchd-vlm-backfill.sh").read_text()
     assert 'LABEL="com.petcam.vlm-historical-backfill"' in script
     assert "reporter.vlm_backfill_worker" in script
-    assert "<key>RunAtLoad</key><true/>" in script
-    assert "<key>StartInterval</key><integer>3600</integer>" in script
+    assert "RunAtLoad" not in script
+    assert "<key>StartInterval</key>" not in script
+    assert "<key>StartCalendarInterval</key>" in script
     assert "VLM_PROVIDER</key><string>claude_cli_batch" in script
     assert "ANTHROPIC_MODEL_EXACT</key><string>claude-sonnet-5" in script
     assert "REGISTER_HIGHLIGHTS</key><string>0" in script
@@ -54,5 +56,11 @@ def test_backfill_installer_renders_valid_plist_without_real_bootstrap(tmp_path)
     plist_path = tmp_path / "Library/LaunchAgents/com.petcam.vlm-historical-backfill.plist"
     payload = plistlib.loads(plist_path.read_bytes())
     assert payload["ProgramArguments"][-1] == "reporter.vlm_backfill_worker"
+    assert "RunAtLoad" not in payload
+    assert "StartInterval" not in payload
+    hours = sorted(entry["Hour"] for entry in payload["StartCalendarInterval"])
+    assert hours == list(range(7, 20))  # 07~19시 정각만
+    assert all(entry["Minute"] == 0 for entry in payload["StartCalendarInterval"])
+    assert not (set(hours) & {20, 21, 22, 23, 0, 2, 4})  # 정규 야간 schedule 과 무겹침
     assert payload["EnvironmentVariables"]["ANTHROPIC_MODEL_EXACT"] == "claude-sonnet-5"
     assert payload["EnvironmentVariables"]["REGISTER_HIGHLIGHTS"] == "0"

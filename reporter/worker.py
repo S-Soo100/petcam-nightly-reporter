@@ -109,7 +109,10 @@ def _format(activity: dict, behaviors: dict, now: datetime) -> str:
     failed = behaviors["failed_infra"]
     sampled = behaviors["sampled_count"]
     unseen = behaviors["unseen"]
-    if sampled > 0 and failed >= sampled:
+    if sampled == 0:
+        # VLM 샘플링이 꺼진 창(SAMPLE_TOP_N=0 등) — '특이행동 없음'(분석 결론)과 구분해야 오해가 없다.
+        sig = "VLM 샘플링 꺼짐"
+    elif sampled > 0 and failed >= sampled:
         sig = f"⚠️분석실패 {failed}/{sampled} (claude 한도/인증 — 로그 확인)"
     elif signals:
         sig = " ".join(signals) + (f" ⚠️일부실패 {failed}/{sampled}" if failed else "")

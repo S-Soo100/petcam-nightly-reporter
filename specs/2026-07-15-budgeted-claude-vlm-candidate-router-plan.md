@@ -2,6 +2,12 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **2026-07-16 단일 호스트 운영 하드닝 반영** (`docs/superpowers/plans/2026-07-16-vlm-single-host-operations-hardening.md`):
+> - production candidate host 는 검증된 **Mac mini 한 대**로 단일화하고, enabled worker 는 `VLM_EXPECTED_HOST` 불일치 시 DB/Claude/Slack 전에 fail-closed 한다(`reporter/vlm_host_guard.py`).
+> - 전역 `load_due_jobs()` 는 **폐기** — 정규 worker 는 현재 selector/window job 만 먼저 처리하고, 그 window 가 비워졌고 breaker 도 없을 때만 오래된 정규 retryable 을 최대 4개 bounded recovery 한다(`load_due_jobs_for_selector_window` / `load_recovery_jobs_for_selector`). backfill selector 는 절대 읽지 않는다.
+> - scheduled run 마다 **VLM 전용 Slack 요약 1회**(`reporter/vlm_run_summary.py`) — metadata 상황판과 혼동 금지, 후보 0개도 `후보 0개 · VLM 호출 0회 · 정상 종료` 로 보고.
+> - Claude CLI 실패는 **redacted diagnostic**(`clip_vlm_jobs.failure_diagnostic`)과 durable attempt 당 **최대 2회 subretry**(retryable 만)로 처리하며, auth/quota/model/clip-set 은 breaker 로 이후 호출을 중단한다.
+
 **Goal:** 밤 20~04시를 2시간 구간으로 나눠 카메라별 최대 4개 후보만 직접 Anthropic Messages API로 분석하고, 선정 근거·모델·token·비용을 재현 가능하게 저장하는 shadow 파이프라인을 만든다.
 
 **Architecture:** `petcam-lab`에는 selector run/job 원장을 forward migration과 원자 RPC로 추가한다. `petcam-nightly-reporter`는 기존 activity worker와 분리된 entrypoint에서 metadata-only episode/slot selector를 실행하고, durable job 저장 뒤에만 직접 이미지 API를 호출한다. 결과는 shadow 테이블에만 남기며 `behavior_logs`, 앱 하이라이트, 활동시간에는 반영하지 않는다.

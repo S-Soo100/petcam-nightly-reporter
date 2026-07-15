@@ -5,6 +5,7 @@ import socket
 from collections import Counter
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from supabase import create_client
 
@@ -31,6 +32,12 @@ from reporter.vlm_store import create_run_and_jobs, load_due_jobs_for_selector
 
 COMPLETE_STATUSES = {"succeeded", "failed_terminal"}
 BLOCKING_CODES = {"not_logged_in", "quota_exceeded", "clip_set_mismatch"}
+_KST = ZoneInfo("Asia/Seoul")
+
+
+def backfill_allowed_now(now: datetime) -> bool:
+    """정규 야간 schedule(22/00/02/04)·shared Claude lock 과 겹치지 않게 07:00<=KST<20:00 만 허용."""
+    return 7 <= now.astimezone(_KST).hour < 20
 
 
 class InsufficientCandidates(RuntimeError):
@@ -192,12 +199,15 @@ def run(
     acquire_vlm_lock_fn=acquire_vlm_lock,release_vlm_lock_fn=release_vlm_lock,
     acquire_activity_lock_fn=acquire_activity_lock,release_activity_lock_fn=release_activity_lock,
 ) -> int:
-    now=now or datetime.now(timezone.utc);vlm_lock=acquire_vlm_lock_fn()
+    now=now or datetime.now(timezone.utc)
+    # §7.2 daytime guard: lock/Supabase/R2/Gate/Claude 어느 것도 건드리기 전에 먼저 판정.
+    if not backfill_allowed_now(now):print("[vlm-backfill] outside 07-19 KST — no-op");return 0
+    vlm_lock=acquire_vlm_lock_fn()
     if vlm_lock is None:return 0
     try:
+        # §7.2: backfill worker 는 BACKFILL_SELECTOR_VERSION job 만 소유한다. 정규 selector
+        # 를 먼저 drain 하던 구계약을 제거해 정규/backfill queue 교차 소비를 차단한다.
         sb=sb or create_client(config.SUPABASE_URL,config.SUPABASE_KEY)
-        regular=load_due_jobs_for_selector(sb,config.VLM_SELECTOR_VERSION,None,None)
-        if regular:process_fn(sb,regular);return 0
         camera_id=choose_target_camera(sb,source_nights())
         blocked=blocking_error_for_backfill(sb,camera_id)
         if blocked:print(f"[vlm-backfill] blocked code={blocked}");return 0

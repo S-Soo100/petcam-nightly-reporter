@@ -77,6 +77,9 @@ LABELING_TRIAGE_BATCH_LIMIT = int(os.environ.get("LABELING_TRIAGE_BATCH_LIMIT", 
 LABELING_TRIAGE_FRAMES = int(os.environ.get("LABELING_TRIAGE_FRAMES", "12"))
 
 VLM_ROUTER_ENABLED = os.environ.get("VLM_ROUTER_ENABLED", "0") == "1"
+# 정규 candidate worker fail-closed host guard(§6.1). 검증된 Mac mini hostname 을 명시해야
+# enabled worker 가 DB/Claude/Slack 을 건드린다. 미설정이면 enabled 실행은 즉시 nonzero 종료.
+VLM_EXPECTED_HOST = os.environ.get("VLM_EXPECTED_HOST", "")
 VLM_PROVIDER = os.environ.get("VLM_PROVIDER", "direct_api")
 VLM_SELECTOR_VERSION = "budget-router-v1"
 VLM_ACTIVITY_POLICY_VERSION = "activity-v1"

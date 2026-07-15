@@ -28,6 +28,12 @@ if [ ! -f "$CHECKPOINT" ]; then
 fi
 
 LAUNCHD_PATH="$(dirname "$UV_BIN"):$(dirname "$CLAUDE_BIN"):/usr/bin:/bin"
+# §7.2: 상시/주기 트리거 대신 07~19시 정각 calendar 만 — 정규 야간(22/00/02/04)
+# schedule 및 shared Claude lock 과 겹치지 않게 낮에만 backfill 을 실행한다.
+CAL=""
+for HOUR in 7 8 9 10 11 12 13 14 15 16 17 18 19; do
+  CAL="$CAL<dict><key>Hour</key><integer>$HOUR</integer><key>Minute</key><integer>0</integer></dict>"
+done
 mkdir -p "$HOME/Library/LaunchAgents"
 cat > "$PLIST" <<PLISTEOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -36,8 +42,7 @@ cat > "$PLIST" <<PLISTEOF
 <key>Label</key><string>$LABEL</string>
 <key>ProgramArguments</key><array><string>$UV_BIN</string><string>run</string><string>python</string><string>-m</string><string>reporter.vlm_backfill_worker</string></array>
 <key>WorkingDirectory</key><string>$REPO_DIR</string>
-<key>RunAtLoad</key><true/>
-<key>StartInterval</key><integer>3600</integer>
+<key>StartCalendarInterval</key><array>$CAL</array>
 <key>StandardOutPath</key><string>/tmp/vlm-historical-backfill.log</string>
 <key>StandardErrorPath</key><string>/tmp/vlm-historical-backfill.log</string>
 <key>EnvironmentVariables</key><dict>
@@ -62,6 +67,6 @@ launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$PLIST"
 
 echo "installed $LABEL provider=claude_cli_batch model=claude-sonnet-5"
-echo "RunAtLoad 1회 후 1시간마다 실행하며, 240개 완료 시 자동 no-op"
+echo "07:00~19:00 KST hourly 실행(정규 야간 schedule 과 무겹침), 240개 완료 시 자동 no-op"
 echo "log: /tmp/vlm-historical-backfill.log"
 echo "stop: launchctl bootout gui/$(id -u)/$LABEL"

@@ -2,6 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **2026-07-16 단일 호스트 운영 하드닝 반영** (`docs/superpowers/plans/2026-07-16-vlm-single-host-operations-hardening.md`):
+> - backfill worker 의 **정규 selector-first drain 은 제거**됐다. backfill worker 는 `BACKFILL_SELECTOR_VERSION` job 만 생성·조회·처리한다(정규 queue 교차 소비 금지).
+> - backfill 은 정규 야간 schedule·shared Claude lock 과 겹치지 않게 **07:00~19:59 KST 에만** 실행한다(`backfill_allowed_now`). installer 도 상시/주기 트리거 대신 **07~19시 정각 calendar** 만 만든다.
+> - backfill LaunchAgent 는 진행률 완료가 확인되기 전까지 유지하며, 완료 확인 전 삭제·job 폐기를 하지 않는다.
+
 **Goal:** 2026-07-07~07-14 source night에서 주 카메라 영상 30개씩 총 240개를 local Gate 후보 보강 후 Claude Sonnet 5로 오늘 한 시간 간격으로 shadow 분석한다.
 
 **Architecture:** `vlm_backfill_selector.py`가 날짜·시간 bucket·prepool·슬롯 quota를 순수하게 계산하고, `vlm_backfill_gate.py`가 기존 evidence를 재사용하거나 Gate를 메모리에서만 실행한다. `vlm_backfill_worker.py`는 기존 selector run/job RPC와 Claude CLI batch runtime을 재사용하며, 별도 LaunchAgent가 시간당 미완료 source night 하나를 처리한다. 새 DB migration은 없다.

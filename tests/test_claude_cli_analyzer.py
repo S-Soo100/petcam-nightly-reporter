@@ -114,6 +114,25 @@ def test_cli_batch_normalizes_timeout_as_provider_error(tmp_path):
         analyze_batch(_frames(tmp_path), "claude-sonnet-5", runner=timeout)
 
 
+@pytest.mark.parametrize("message", [
+    "Session limit reached",
+    "Usage limit exceeded",
+    "Rate limit reached",
+    "Account quota exhausted",
+])
+def test_cli_batch_normalizes_subscription_limits_without_leaking_details(tmp_path, message):
+    envelope = _envelope([], is_error=True)
+    envelope["result"] = f"{message} for secret-account@example.com"
+
+    def limited(*_args, **_kwargs):
+        return SimpleNamespace(returncode=0, stdout=json.dumps(envelope), stderr="")
+
+    with pytest.raises(CliBatchError, match="quota_exceeded") as caught:
+        analyze_batch(_frames(tmp_path), "claude-sonnet-5", runner=limited)
+    assert caught.value.code == "quota_exceeded"
+    assert "example.com" not in str(caught.value)
+
+
 def test_cli_auth_probe_requires_logged_in_without_exposing_account_data():
     calls = []
 

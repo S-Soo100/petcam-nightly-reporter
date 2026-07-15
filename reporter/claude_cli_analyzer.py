@@ -56,6 +56,16 @@ class CliBatchResult:
     model_mismatch: bool
 
 
+def _safe_failure_code(text: str) -> str | None:
+    """Claude 원문은 계정 정보를 포함할 수 있어 안전한 고정 코드만 반환해."""
+    lowered = text.lower()
+    if "not logged in" in lowered:
+        return "not_logged_in"
+    if any(marker in lowered for marker in ("session limit", "usage limit", "rate limit", "quota")):
+        return "quota_exceeded"
+    return None
+
+
 def check_cli_auth(*, runner=subprocess.run) -> None:
     try:
         completed = runner(
@@ -118,6 +128,9 @@ def analyze_batch(frame_sets, model, *, runner=subprocess.run) -> CliBatchResult
     except (FileNotFoundError, subprocess.SubprocessError) as exc:
         raise CliBatchError(f"provider_error: {type(exc).__name__}") from exc
     if completed.returncode != 0:
+        safe_code = _safe_failure_code(f"{completed.stdout}\n{completed.stderr}")
+        if safe_code:
+            raise CliBatchError(safe_code)
         raise CliBatchError(f"provider_error: cli_rc_{completed.returncode}")
     try:
         envelope = json.loads(completed.stdout)
@@ -125,8 +138,9 @@ def analyze_batch(frame_sets, model, *, runner=subprocess.run) -> CliBatchResult
         raise CliBatchError("provider_error: invalid_envelope") from exc
     if envelope.get("is_error"):
         result_text = str(envelope.get("result") or "").lower()
-        if "not logged in" in result_text:
-            raise CliBatchError("not_logged_in")
+        safe_code = _safe_failure_code(result_text)
+        if safe_code:
+            raise CliBatchError(safe_code)
         if envelope.get("subtype") == "error_max_turns" or envelope.get("terminal_reason") == "max_turns":
             raise CliBatchError("max_turns_exceeded")
         raise CliBatchError("provider_error: claude_cli_error")

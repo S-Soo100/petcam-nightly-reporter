@@ -135,3 +135,22 @@ def test_activity_worker_lock_defers_gate_prepool():
         acquire_activity_lock_fn=lambda: None,
         prepare_fn=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("must defer")),
     ) == 0
+
+
+def test_previous_quota_error_blocks_future_backfill_wave():
+    start = bucket_plans(source_nights()[0])[0].start
+    sb = FakeSB({
+        "motion_clips": [_motion_clip("a", "camera-a", start)],
+        "clip_vlm_jobs": [{
+            "id": "limited",
+            "camera_id": "camera-a",
+            "selector_version": BACKFILL_SELECTOR_VERSION,
+            "status": "failed_retryable",
+            "error_code": "quota_exceeded",
+        }],
+    })
+    assert run(
+        sb=sb,
+        acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
+        prepare_fn=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("must remain blocked")),
+    ) == 0

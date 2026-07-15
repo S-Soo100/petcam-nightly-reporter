@@ -1,7 +1,7 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from tests._fakes import FakeSB
-from reporter.claude_cli_analyzer import CliBatchResult
+from reporter.claude_cli_analyzer import CliBatchError, CliBatchResult
 from reporter.vlm_budget import Usage
 from reporter.vlm_candidate_worker import cap_night_selections, failure_status, process_cli_jobs, run
 from reporter.vlm_models import CandidateClip, SelectedCandidate, Slot
@@ -48,6 +48,7 @@ def test_cli_provider_batches_four_jobs_and_splits_usage(tmp_path):
 
     stats=process_cli_jobs(
         sb,jobs,analyzer=analyzer,
+        auth_check=lambda:None,
         download_fn=lambda _key,dest: dest,
         extract_fn=lambda _video,out: [out/f"{i}.jpg" for i in range(6)],
     )
@@ -78,7 +79,28 @@ def test_cli_provider_keeps_processing_when_one_clip_download_fails(tmp_path):
         return CliBatchResult("session",model,model,{"c1":item},Usage(10,0,0,2),.01,False)
 
     stats=process_cli_jobs(
-        sb,jobs,analyzer=analyzer,download_fn=download,
+        sb,jobs,analyzer=analyzer,auth_check=lambda:None,download_fn=download,
         extract_fn=lambda _video,out:[out/f"{i}.jpg" for i in range(6)],
     )
     assert stats=={"failed_retryable":1,"succeeded":1}
+
+
+def test_cli_provider_auth_failure_preserves_retry_attempt_and_records_safe_code():
+    job={"id":"j0","clip_id":"c0","camera_id":"cam","selector_run_id":"run","slot":Slot.CUSTOMER_HIGHLIGHT.value,"status":"failed_retryable","attempt_count":1}
+    sb=FakeSB({"clip_vlm_jobs":[job],"motion_clips":[{"id":"c0","r2_key":"c0.mp4"}]})
+
+    def auth_check():
+        raise CliBatchError("not_logged_in")
+
+    def must_not_run(*_args,**_kwargs):
+        raise AssertionError("auth failure must stop before download/analyzer")
+
+    stats=process_cli_jobs(
+        sb,[job],auth_check=auth_check,analyzer=must_not_run,
+        download_fn=must_not_run,extract_fn=must_not_run,
+    )
+    stored=sb.store["clip_vlm_jobs"][0]
+    assert stats=={"not_logged_in":1}
+    assert stored["status"]=="failed_retryable"
+    assert stored["attempt_count"]==1
+    assert stored["error_code"]=="not_logged_in"

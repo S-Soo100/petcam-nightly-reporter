@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from reporter.claude_cli_analyzer import CliBatchError, analyze_batch
+from reporter.claude_cli_analyzer import CliBatchError, analyze_batch, check_cli_auth
 
 
 def _frames(tmp_path, clip_ids=("c1", "c2")):
@@ -74,6 +74,18 @@ def test_cli_batch_rejects_auth_error_model_mismatch_and_clip_set(tmp_path):
     with pytest.raises(CliBatchError, match="provider_error"):
         analyze_batch(frames, "claude-sonnet-5", runner=response(_envelope([], is_error=True)))
 
+    logged_out = _envelope([], is_error=True)
+    logged_out["result"] = "Not logged in · Please run /login"
+    with pytest.raises(CliBatchError, match="not_logged_in") as caught:
+        analyze_batch(frames, "claude-sonnet-5", runner=response(logged_out))
+    assert caught.value.code == "not_logged_in"
+
+    max_turns = _envelope([], is_error=True)
+    max_turns.update({"subtype": "error_max_turns", "terminal_reason": "max_turns"})
+    with pytest.raises(CliBatchError, match="max_turns_exceeded") as caught:
+        analyze_batch(frames, "claude-sonnet-5", runner=response(max_turns))
+    assert caught.value.code == "max_turns_exceeded"
+
     items = [{"clip_id": "c1", "action": "moving", "confidence": 0.8, "reasoning": "moves"}]
     mismatch = analyze_batch(frames, "claude-sonnet-5", runner=response(_envelope(items, model="claude-sonnet-4-6")))
     assert mismatch.model_mismatch is True
@@ -100,3 +112,24 @@ def test_cli_batch_normalizes_timeout_as_provider_error(tmp_path):
 
     with pytest.raises(CliBatchError, match="provider_error: timeout"):
         analyze_batch(_frames(tmp_path), "claude-sonnet-5", runner=timeout)
+
+
+def test_cli_auth_probe_requires_logged_in_without_exposing_account_data():
+    calls = []
+
+    def runner(command, **kwargs):
+        calls.append((command, kwargs))
+        return SimpleNamespace(returncode=0, stdout=json.dumps({"loggedIn": True}), stderr="")
+
+    check_cli_auth(runner=runner)
+    assert calls[0][0] == ["claude", "auth", "status"]
+    assert calls[0][1]["timeout"] == 15
+
+    def logged_out(*_args, **_kwargs):
+        payload = {"loggedIn": False, "email": "must-not-be-copied@example.com"}
+        return SimpleNamespace(returncode=0, stdout=json.dumps(payload), stderr="")
+
+    with pytest.raises(CliBatchError, match="not_logged_in") as caught:
+        check_cli_auth(runner=logged_out)
+    assert caught.value.code == "not_logged_in"
+    assert "example.com" not in str(caught.value)

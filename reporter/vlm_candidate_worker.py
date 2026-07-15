@@ -9,7 +9,7 @@ from botocore.exceptions import BotoCoreError,ClientError
 from supabase import create_client
 from reporter import config,r2
 from reporter.anthropic_analyzer import SYSTEM_PROMPT,analyze_clip
-from reporter.claude_cli_analyzer import CliBatchError,analyze_batch
+from reporter.claude_cli_analyzer import CliBatchError,analyze_batch,check_cli_auth
 from reporter.timewin import trigger_window
 from reporter.vlm_budget import fair_job_order
 from reporter.vlm_candidate_indexer import load_recent_history,load_window_candidates,partition_eligibility
@@ -73,8 +73,14 @@ def _split(total,count,index):
     return quotient+(1 if index<remainder else 0)
 
 
-def process_cli_jobs(sb,jobs,*,analyzer=analyze_batch,download_fn=r2.download_clip,extract_fn=extract_six):
-    stats=defaultdict(int);groups=defaultdict(list)
+def process_cli_jobs(sb,jobs,*,analyzer=analyze_batch,download_fn=r2.download_clip,extract_fn=extract_six,auth_check=check_cli_auth):
+    stats=defaultdict(int)
+    if not jobs:return {}
+    try:auth_check()
+    except CliBatchError as exc:
+        for job in jobs:update_job(sb,job["id"],{"error_code":exc.code});stats[exc.code]+=1
+        return dict(stats)
+    groups=defaultdict(list)
     for job in fair_job_order(jobs):groups[(job["selector_run_id"],job["camera_id"])].append(job)
     with tempfile.TemporaryDirectory() as tmp:
         for batch in groups.values():
@@ -95,7 +101,7 @@ def process_cli_jobs(sb,jobs,*,analyzer=analyze_batch,download_fn=r2.download_cl
                 result=analyzer(frames,config.VLM_MODEL)
             except CliBatchError as exc:
                 for job in ready:
-                    status=failure_status(job);update_job(sb,job["id"],{"status":status,"error_code":str(exc).split(":",1)[0]});stats[status]+=1
+                    status=failure_status(job);update_job(sb,job["id"],{"status":status,"error_code":exc.code});stats[status]+=1
                 break
             count=len(ready)
             for index,job in enumerate(ready):
@@ -111,6 +117,7 @@ def process_cli_jobs(sb,jobs,*,analyzer=analyze_batch,download_fn=r2.download_cl
                     "cache_read_input_tokens":_split(result.usage.cache_read_input_tokens,count,index),
                     "output_tokens":_split(result.usage.output_tokens,count,index),
                     "cost_usd":"0",
+                    "error_code":None,
                     "completed_at":datetime.now(timezone.utc).isoformat(),
                 }
                 update_job(sb,job["id"],values);stats[values["status"]]+=1

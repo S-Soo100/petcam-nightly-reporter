@@ -40,7 +40,9 @@ _SCHEMA = {
 
 
 class CliBatchError(RuntimeError):
-    pass
+    def __init__(self, message: str):
+        super().__init__(message)
+        self.code = message.rsplit(": ", 1)[-1]
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +54,26 @@ class CliBatchResult:
     usage: Usage
     provider_estimated_cost_usd: float
     model_mismatch: bool
+
+
+def check_cli_auth(*, runner=subprocess.run) -> None:
+    try:
+        completed = runner(
+            ["claude", "auth", "status"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, subprocess.SubprocessError) as exc:
+        raise CliBatchError("auth_probe_failed") from exc
+    if completed.returncode != 0:
+        raise CliBatchError("auth_probe_failed")
+    try:
+        status = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise CliBatchError("auth_probe_failed") from exc
+    if status.get("loggedIn") is not True:
+        raise CliBatchError("not_logged_in")
 
 
 def _validate(frame_sets: dict[str, list[Path]], model: str) -> None:
@@ -102,6 +124,11 @@ def analyze_batch(frame_sets, model, *, runner=subprocess.run) -> CliBatchResult
     except json.JSONDecodeError as exc:
         raise CliBatchError("provider_error: invalid_envelope") from exc
     if envelope.get("is_error"):
+        result_text = str(envelope.get("result") or "").lower()
+        if "not logged in" in result_text:
+            raise CliBatchError("not_logged_in")
+        if envelope.get("subtype") == "error_max_turns" or envelope.get("terminal_reason") == "max_turns":
+            raise CliBatchError("max_turns_exceeded")
         raise CliBatchError("provider_error: claude_cli_error")
     usage_map = envelope.get("modelUsage") or {}
     if not usage_map:

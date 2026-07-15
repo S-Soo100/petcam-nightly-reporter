@@ -31,8 +31,9 @@ PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
 
 mkdir -p "$HOME/Library/LaunchAgents"
 
-# 30분마다 상시(StartInterval) → 직전 30분(WINDOW_HOURS=0.5) 상황판. 활동 0 인 창은 worker
-# 가 스킵(빈 카드 방지)이라 낮엔 조용. claude 는 SAMPLE_TOP_N=1(밤 top-1)로 한도 통제.
+# 밤 4회(22:05/00:05/02:05/04:05 KST), 직전 2시간(WINDOW_HOURS=2) 움직임 수집 요약. 정규 VLM
+# 실행(22/00/02/04 정각)과 :05 offset 으로 분리. SAMPLE_TOP_N=0 으로 legacy Claude 호출 차단
+# (candidate worker 와 중복 호출 방지). 클립 0 인 창은 worker 가 스킵(빈 카드 방지).
 cat > "$PLIST" <<PLISTEOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -44,12 +45,16 @@ cat > "$PLIST" <<PLISTEOF
         <string>$UV_BIN</string><string>run</string><string>python</string><string>-m</string><string>reporter.worker</string>
     </array>
     <key>WorkingDirectory</key><string>$REPO_DIR</string>
-    <key>RunAtLoad</key><true/>
-    <key>StartInterval</key><integer>1800</integer>
+    <key>StartCalendarInterval</key><array>
+        <dict><key>Hour</key><integer>22</integer><key>Minute</key><integer>5</integer></dict>
+        <dict><key>Hour</key><integer>0</integer><key>Minute</key><integer>5</integer></dict>
+        <dict><key>Hour</key><integer>2</integer><key>Minute</key><integer>5</integer></dict>
+        <dict><key>Hour</key><integer>4</integer><key>Minute</key><integer>5</integer></dict>
+    </array>
     <key>StandardOutPath</key><string>/tmp/nightly-reporter.log</string>
     <key>StandardErrorPath</key><string>/tmp/nightly-reporter.log</string>
     <key>EnvironmentVariables</key>
-    <dict><key>PATH</key><string>$LAUNCHD_PATH</string></dict>
+    <dict><key>PATH</key><string>$LAUNCHD_PATH</string><key>WINDOW_HOURS</key><string>2</string><key>SAMPLE_TOP_N</key><string>0</string></dict>
 </dict>
 </plist>
 PLISTEOF
@@ -60,6 +65,6 @@ launchctl bootstrap "gui/$(id -u)" "$PLIST"
 
 echo "✅ installed + bootstrapped: $PLIST"
 echo "   PATH=$LAUNCHD_PATH"
-echo "   즉시 1회(RunAtLoad) + 30분마다(활동시 상황판 · 무활동시 스킵)"
+echo "   22:05/00:05/02:05/04:05 KST · 직전 2h 움직임 수집 요약 · SAMPLE_TOP_N=0(Claude 0)"
 echo "   로그:  tail -f /tmp/nightly-reporter.log"
 echo "   해제:  launchctl bootout gui/\$(id -u)/$LABEL && rm \"$PLIST\""

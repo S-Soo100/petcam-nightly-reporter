@@ -77,7 +77,7 @@ def test_run_sends_exactly_one_vlm_summary_on_success():
     rc, calls = _run_with_seams([{"id": "cur1"}], [], [])
     assert rc == 0
     assert len(calls["sent"]) == 1
-    assert "VLM 후보 분석" in calls["sent"][0]
+    assert "VLM 행동 분석" in calls["sent"][0]
 
 
 def test_run_blocked_lock_sends_warning_and_returns_nonzero_without_processing():

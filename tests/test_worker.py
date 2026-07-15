@@ -1,7 +1,8 @@
-"""worker._format — Slack 카드 포매팅(순수함수). claude 실패 경보 회귀 방어(2026-07-07).
+"""worker._format — 움직임 수집 요약 Slack 카드(순수함수).
 
-'조용한 한도실패'(claude 전량 error 인데 리포트는 '특이행동 없음' 으로 정상처럼 나감)를
-막는 게 이 포맷 로직의 핵심. 그 경보 분기를 고정한다.
+VLM 분석 결과와 혼동되지 않게 '움직임 수집 통계'임을 명시한다. SAMPLE_TOP_N=0 배포에서
+legacy Claude 호출은 없다. 방어적으로 sampled>0 & 전량 실패인 경우에만 조용한 한도실패
+경보를 유지(2026-07-07 교훈).
 """
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -9,61 +10,42 @@ from zoneinfo import ZoneInfo
 from reporter.worker import _format
 
 _KST = ZoneInfo("Asia/Seoul")
-_NOW = datetime(2026, 7, 7, 3, 0, tzinfo=_KST)
+_NOW = datetime(2026, 7, 16, 2, 5, tzinfo=_KST)  # 02:05 실행 → 00:00~02:00 블록 표시
 
 
-def _activity(clip_count=10):
-    return {"clip_count": clip_count, "active_minutes": 5.0,
-            "peak_hour_kst": 2, "hourly_kst": {2: 6, 3: 4}}
+def _activity(clip_count=27):
+    return {"clip_count": clip_count, "active_minutes": 14.5,
+            "peak_hour_kst": 1, "hourly_kst": {1: 16, 0: 11}}
 
 
-def _beh(sampled, failed, shed=False, drink=False, feed=False, unseen=0):
-    return {"sampled_count": sampled, "failed_infra": failed, "unseen": unseen,
-            "analyzed_ok": sampled - failed,
-            "shed_observed": shed, "drink_observed": drink, "feeding_observed": feed}
+def _beh(sampled=0, failed=0):
+    return {"sampled_count": sampled, "failed_infra": failed, "unseen": 0,
+            "analyzed_ok": max(0, sampled - failed),
+            "shed_observed": False, "drink_observed": False, "feeding_observed": False}
 
 
-def test_format_all_failed_shows_alert_not_silent():
-    # claude 전량 실패 → '특이행동 없음'(정상처럼) 이 아니라 경보로 (조용한 실패 방지)
-    msg = _format(_activity(), _beh(5, 5), _NOW)
-    assert "분석실패 5/5" in msg
-    assert "특이행동 없음" not in msg
+def test_format_movement_summary_shape():
+    msg = _format(_activity(), _beh(), _NOW)
+    assert "📊 움직임 수집 요약 (00:00~02:00)" in msg
+    assert "· 감지 클립 27개 · 약 14.5분" in msg
+    assert "· 집중 시간대: 1시" in msg
+    assert "이 메시지는 움직임 수집 통계이며 VLM 분석 결과가 아님" in msg
 
 
-def test_format_partial_failed_tags_alert():
-    msg = _format(_activity(), _beh(5, 2, shed=True), _NOW)
-    assert "🧬탈피" in msg
-    assert "일부실패 2/5" in msg
-
-
-def test_format_clean_no_alert():
-    msg = _format(_activity(), _beh(5, 0, drink=True), _NOW)
-    assert "💧음수" in msg
+def test_format_sampling_off_has_no_behavior_or_alert():
+    msg = _format(_activity(), _beh(sampled=0), _NOW)
+    assert "특이행동" not in msg
     assert "⚠️" not in msg
+    assert "샘플" not in msg  # SAMPLE_TOP_N=0 → 행동 라벨 라인 없음
 
 
-def test_format_unseen_shows_gecko_absent():
-    # 분석한 clip 이 unseen → '특이행동 없음' 이 아니라 '게코 안 보임(분석불필요)' 로 구분
-    msg = _format(_activity(), _beh(1, 0, unseen=1), _NOW)
-    assert "게코 안 보임" in msg
-    assert "특이행동 없음" not in msg
-
-
-def test_format_no_behavior_but_success_no_alert():
-    # 성공했는데 특이행동만 없음 → 경보 없이 '특이행동 없음'
-    msg = _format(_activity(), _beh(5, 0), _NOW)
-    assert "특이행동 없음" in msg
-    assert "⚠️" not in msg
-
-
-def test_format_sampled_zero_shows_vlm_sampling_off():
-    # SAMPLE_TOP_N=0 등 VLM 샘플링이 꺼진 창은 '특이행동 없음'(분석 결론)으로 오해되면 안 된다.
-    msg = _format(_activity(), _beh(0, 0), _NOW)
-    assert "샘플0: VLM 샘플링 꺼짐" in msg
-    assert "특이행동 없음" not in msg
+def test_format_defensive_all_failed_alert_preserved():
+    # 방어적: 누군가 SAMPLE_TOP_N 재활성 후 전량 실패면 조용한 한도실패 경보 유지
+    msg = _format(_activity(), _beh(sampled=3, failed=3), _NOW)
+    assert "샘플 VLM 분석 전량 실패 3/3" in msg
 
 
 def test_format_no_clips_short_circuit():
     empty = {"clip_count": 0, "active_minutes": 0.0, "peak_hour_kst": None, "hourly_kst": {}}
-    msg = _format(empty, _beh(0, 0), _NOW)
-    assert "활동 없음" in msg
+    msg = _format(empty, _beh(), _NOW)
+    assert "움직임 없음" in msg

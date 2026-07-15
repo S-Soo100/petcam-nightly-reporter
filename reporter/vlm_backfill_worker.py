@@ -9,7 +9,8 @@ from zoneinfo import ZoneInfo
 
 from supabase import create_client
 
-from reporter import config
+from reporter import config, slack
+from reporter.vlm_backfill_summary import aggregate_backfill_progress, send_backfill_progress
 from reporter.activity_worker import acquire_activity_lock, release_activity_lock
 from reporter.vlm_backfill_gate import GateEnrichment, enrich_prepool
 from reporter.vlm_backfill_selector import (
@@ -194,12 +195,22 @@ def prepare_wave(
     return wave
 
 
+def _report_progress(sb,source_date,now,stats,due,send_fn):
+    """실제 backfill job 을 처리한 cycle 에서만 진행률 Slack 1회(§B). due 가 비면 로그만."""
+    if not due:return
+    summary=aggregate_backfill_progress(sb,source_date=source_date,host=socket.gethostname(),
+                                        now=now,this_run_stats=stats,processed_target=len(due))
+    if not send_backfill_progress(summary,send_fn=send_fn):print(f"[vlm-backfill] slack=FAIL source={source_date}")
+
+
 def run(
     *,sb=None,now=None,dry_run=False,process_fn=process_cli_jobs,prepare_fn=prepare_wave,
     acquire_vlm_lock_fn=acquire_vlm_lock,release_vlm_lock_fn=release_vlm_lock,
     acquire_activity_lock_fn=acquire_activity_lock,release_activity_lock_fn=release_activity_lock,
+    send_fn=None,
 ) -> int:
     now=now or datetime.now(timezone.utc)
+    if send_fn is None:send_fn=slack.post_slack
     # §7.2 daytime guard: lock/Supabase/R2/Gate/Claude 어느 것도 건드리기 전에 먼저 판정.
     if not backfill_allowed_now(now):print("[vlm-backfill] outside 07-19 KST — no-op");return 0
     vlm_lock=acquire_vlm_lock_fn()
@@ -222,6 +233,7 @@ def run(
             due=load_due_jobs_for_selector(sb,BACKFILL_SELECTOR_VERSION,start,end)
             stats=process_fn(sb,due)
             print(f"[vlm-backfill] resume source={source_date} existing=30 due={len(due)} stats={stats}")
+            _report_progress(sb,source_date,now,stats,due,send_fn)
             return 0
         activity_lock=acquire_activity_lock_fn()
         if activity_lock is None:print("[vlm-backfill] activity worker busy — defer");return 0
@@ -231,6 +243,7 @@ def run(
         due=load_due_jobs_for_selector(sb,BACKFILL_SELECTOR_VERSION,wave.start,wave.end)
         stats=process_fn(sb,due)
         print(f"[vlm-backfill] source={source_date} selected={len(wave.selected)} stats={stats}")
+        _report_progress(sb,source_date,now,stats,due,send_fn)
         return 0
     finally:release_vlm_lock_fn(vlm_lock)
 

@@ -95,6 +95,22 @@ def test_backfill_night_run_is_noop_before_lock_or_db():
     ) == 0
 
 
+def test_backfill_noop_cycles_send_no_slack():
+    sent = []
+    # 야간 guard no-op → Slack 0
+    assert run(now=datetime(2026, 7, 15, 22, tzinfo=_KST), acquire_vlm_lock_fn=lambda: object(),
+               release_vlm_lock_fn=lambda _fd: None, send_fn=lambda t: sent.append(t) or True) == 0
+    # activity worker busy defer → Slack 0
+    start = bucket_plans(source_nights()[0])[0].start
+    sb = FakeSB({"motion_clips": [_motion_clip("a", "camera-a", start)]})
+    assert run(sb=sb, now=datetime(2026, 7, 15, 11, tzinfo=_KST),
+               acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
+               acquire_activity_lock_fn=lambda: None,
+               prepare_fn=lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("defer")),
+               send_fn=lambda t: sent.append(t) or True) == 0
+    assert sent == []
+
+
 def test_target_camera_is_largest_without_hardcoded_uuid():
     start = bucket_plans(source_nights()[0])[0].start
     rows = [_motion_clip(f"a-{i}", "camera-a", start + timedelta(minutes=i)) for i in range(5)]
@@ -199,6 +215,7 @@ def test_existing_30_job_wave_resumes_without_gate_or_reselection():
     start = bucket_plans(source_nights()[0])[0].start
     sb = FakeSB({"motion_clips": [_motion_clip("a", "camera-a", start)], "clip_vlm_jobs": jobs})
     calls = []
+    sent = []
     assert run(
         sb=sb,
         now=datetime(2026, 7, 15, 11, tzinfo=_KST),
@@ -206,9 +223,11 @@ def test_existing_30_job_wave_resumes_without_gate_or_reselection():
         acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
         prepare_fn=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("resume must not reselect")),
         acquire_activity_lock_fn=lambda: (_ for _ in ()).throw(AssertionError("resume must not run Gate")),
+        send_fn=lambda text: sent.append(text) or True,
     ) == 0
     assert len(calls) == 1
     assert len(calls[0]) == 30
+    assert len(sent) == 1 and "과거 영상 VLM 분석" in sent[0]  # 실제 처리 cycle → 진행률 1회
 
 
 def test_partial_persisted_wave_fails_closed_instead_of_adding_jobs():

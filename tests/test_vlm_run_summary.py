@@ -32,34 +32,33 @@ def _summary(**over):
 
 def test_format_happy_path_matches_contract():
     msg = format_vlm_run_summary(_summary())
-    assert "🦎 VLM 후보 분석 (07/16 00:00~02:00 KST)" in msg
-    assert "· host: Mac mini · run: 20260716T0200" in msg
-    assert "· 후보 4개: 하이라이트 1 / 미세행동 1 / 다양성 1 / 제외감사 1" in msg
-    assert "· 결과: 성공 4 / 재시도 0 / 실패 0 / 모델보류 0 / 대기 0" in msg
-    assert "· 행동: moving 2 / unseen 2" in msg
-    assert "· 모델: claude-sonnet-5 · Claude 구독 · 직접 API $0" in msg
-    assert "· queue: 정상 (최고 0분) · 다음 04:00" in msg
+    assert "🦎 VLM 행동 분석 (00:00~02:00)" in msg
+    assert "· 실행 장비: Mac mini · run 0200" in msg
+    assert "· 후보: 4개 / 실제 분석: 4개" in msg
+    assert "· 선정: 하이라이트 1 · 미세행동 1 · 다양성 1 · 제외감사 1" in msg
+    assert "· 결과: 성공 4 · 재시도 0 · 실패 0 · 모델보류 0" in msg
+    assert "· 행동: 일반이동 2 · 게코 안 보임 2" in msg
+    assert "· 모델: Claude Sonnet 5 구독 · 직접 API 비용 0원" in msg
+    assert "· 큐: 정상 · 다음 분석 04:00" in msg
 
 
 def test_format_zero_candidates_is_not_no_special_behavior():
     msg = format_vlm_run_summary(_summary(candidate_count=0, status_counts={}, action_dist={}, slot_counts={}))
-    assert "후보 0개 · VLM 호출 0회 · 정상 종료" in msg
+    assert "후보 0개 · Claude 호출 0회 · 정상 종료" in msg
     assert "특이행동 없음" not in msg
 
 
-def test_format_partial_r2_frame_failure():
+def test_format_partial_r2_frame_failure_shows_analyzed_count():
     msg = format_vlm_run_summary(_summary(
         status_counts={"succeeded": 2, "failed_retryable": 2, "failed_terminal": 0, "held_model_mismatch": 0, "queued": 0}))
-    assert "성공 2 / 재시도 2" in msg
+    assert "성공 2 · 재시도 2" in msg
 
 
-def test_format_auth_breaker_shows_queue_and_retry():
+def test_format_queued_reduces_analyzed_and_shows_wait():
     msg = format_vlm_run_summary(_summary(
-        status_counts={"succeeded": 0, "failed_retryable": 4, "failed_terminal": 0, "held_model_mismatch": 0, "queued": 0},
-        action_dist={}, model_actual=None, oldest_due_age_min=42))
-    assert "재시도 4" in msg
-    assert "⚠️지연 (최고 42분>0" not in msg  # 형식은 '(최고 42분)'
-    assert "⚠️지연 (최고 42분)" in msg
+        status_counts={"succeeded": 2, "failed_retryable": 0, "failed_terminal": 0, "held_model_mismatch": 0, "queued": 2}))
+    assert "실제 분석: 2개" in msg  # 후보 4 − 대기 2
+    assert "대기 2" in msg
 
 
 def test_format_model_mismatch_warning():
@@ -73,12 +72,13 @@ def test_format_model_mismatch_warning():
 def test_format_queue_over_30_minutes_flags_delay():
     msg = format_vlm_run_summary(_summary(oldest_due_age_min=45,
         status_counts={"succeeded": 0, "failed_retryable": 1, "failed_terminal": 0, "held_model_mismatch": 0, "queued": 3}))
-    assert "⚠️지연 (최고 45분)" in msg
+    assert "⚠️지연(최고 45분)" in msg
 
 
 def test_format_never_leaks_raw_reasoning_path_uuid_email_token():
     msg = format_vlm_run_summary(_summary(
-        action_dist={"moving": 1, "other": 1}))  # unknown action collapses to 'other'
+        action_dist={"moving": 1, "other": 1}))  # unknown action collapses to 기타
+    assert "기타 1" in msg
     for secret in ("/Users/", "@", "sk-", "reasoning", "3f8b2c1a-"):
         assert secret not in msg
 

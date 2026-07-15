@@ -19,9 +19,14 @@ _SLOT_LABEL = {
     "customer_highlight": "하이라이트", "subtle_behavior": "미세행동",
     "diversity_discovery": "다양성", "exclusion_audit": "제외감사",
 }
-# v4.0 행동 클래스. allowlist 밖 action 은 raw 노출 대신 other 로 묶는다.
+# v4.0 행동 클래스 → 운영자용 한글 라벨. allowlist 밖 action 은 raw 노출 대신 기타(other)로 묶는다.
 _ACTION_ALLOWLIST = ("eating_paste", "eating_prey", "drinking", "shedding", "moving", "unseen", "hand_feeding")
-_STATUS_ORDER = ("succeeded", "failed_retryable", "failed_terminal", "held_model_mismatch", "queued")
+_ACTION_LABEL = {
+    "eating_paste": "페이스트 섭취", "eating_prey": "먹이 섭취", "drinking": "핥기",
+    "shedding": "탈피", "moving": "일반이동", "unseen": "게코 안 보임",
+    "hand_feeding": "손급여", "other": "기타",
+}
+_STATUS_ORDER = ("succeeded", "failed_retryable", "failed_terminal", "held_model_mismatch")
 _STATUS_LABEL = {
     "succeeded": "성공", "failed_retryable": "재시도", "failed_terminal": "실패",
     "held_model_mismatch": "모델보류", "queued": "대기",
@@ -101,29 +106,55 @@ def _parse(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
+def friendly_host(host: str | None) -> str:
+    """운영자용 장비 별칭. 'baeg-endeuui-Macmini.local' → 'Mac mini'."""
+    normalized = (host or "").lower().replace(" ", "")
+    if "macmini" in normalized:
+        return "Mac mini"
+    if "macbook" in normalized:
+        return "MacBook"
+    return host or "unknown"
+
+
+def _run_short(run_id: str) -> str:
+    """추적용 짧은 run id. '20260716T020000' → '0200'."""
+    if "T" in run_id and len(run_id) >= 13:
+        return run_id[9:13]
+    return run_id[-4:] if run_id else "----"
+
+
+def _model_label(model_actual: str | None) -> str:
+    return "Claude Sonnet 5" if model_actual == "claude-sonnet-5" else (model_actual or "—")
+
+
 def format_vlm_run_summary(s: VlmRunSummary) -> str:
     ws = s.window_start.astimezone(KST)
     we = s.window_end.astimezone(KST)
     nxt = s.next_run.astimezone(KST)
-    head = f"🦎 VLM 후보 분석 ({ws:%m/%d %H:%M}~{we:%H:%M} KST)"
-    hostline = f"· host: {s.host} · run: {s.run_id}"
+    head = f"🦎 VLM 행동 분석 ({ws:%H:%M}~{we:%H:%M})"
+    hostline = f"· 실행 장비: {friendly_host(s.host)} · run {_run_short(s.run_id)}"
     if s.blocked_lock:
         return "\n".join([head, hostline,
-                          f"· ⚠️ blocked_lock: 다른 실행이 lock 점유 · Claude 호출 0회 · 다음 {nxt:%H:%M}"])
+                          f"· ⚠️ 실행 충돌(blocked_lock): 다른 실행이 lock 점유 · Claude 호출 0회 · 다음 분석 {nxt:%H:%M}"])
     if s.candidate_count == 0:
-        return "\n".join([head, hostline, f"· 후보 0개 · VLM 호출 0회 · 정상 종료 · 다음 {nxt:%H:%M}"])
-    slot_str = " / ".join(f"{_SLOT_LABEL[k]} {s.slot_counts.get(k, 0)}" for k in _SLOT_ORDER)
-    cand = f"· 후보 {s.candidate_count}개: {slot_str}"
-    result = "· 결과: " + " / ".join(f"{_STATUS_LABEL[k]} {s.status_counts.get(k, 0)}" for k in _STATUS_ORDER)
+        return "\n".join([head, hostline, f"· 후보 0개 · Claude 호출 0회 · 정상 종료 · 다음 분석 {nxt:%H:%M}"])
+    queued = s.status_counts.get("queued", 0)
+    analyzed = max(0, s.candidate_count - queued)
+    cand = f"· 후보: {s.candidate_count}개 / 실제 분석: {analyzed}개"
+    slot = "· 선정: " + " · ".join(f"{_SLOT_LABEL[k]} {s.slot_counts.get(k, 0)}" for k in _SLOT_ORDER)
+    result_parts = [f"{_STATUS_LABEL[k]} {s.status_counts.get(k, 0)}" for k in _STATUS_ORDER]
+    if queued:
+        result_parts.append(f"대기 {queued}")
     if s.recovery_count:
-        result += f" · recovery {s.recovery_count}"
+        result_parts.append(f"복구 {s.recovery_count}")
+    result = "· 결과: " + " · ".join(result_parts)
     ordered = sorted(s.action_dist.items(), key=lambda kv: (_ACTION_ALLOWLIST.index(kv[0]) if kv[0] in _ACTION_ALLOWLIST else len(_ACTION_ALLOWLIST), kv[0]))
-    behavior = "· 행동: " + (" / ".join(f"{a} {n}" for a, n in ordered) or "없음")
+    behavior = "· 행동: " + (" · ".join(f"{_ACTION_LABEL.get(a, a)} {n}" for a, n in ordered) or "없음")
     note = f" · ⚠️모델불일치 {s.model_mismatch_count}" if s.model_mismatch_count else ""
-    model = f"· 모델: {s.model_actual or '—'} · Claude 구독 · 직접 API ${s.direct_api_cost_usd:g}{note}"
-    state = "⚠️지연" if s.oldest_due_age_min > 30 else "정상"
-    queue = f"· queue: {state} (최고 {s.oldest_due_age_min}분) · 다음 {nxt:%H:%M}"
-    return "\n".join([head, hostline, cand, result, behavior, model, queue])
+    model = f"· 모델: {_model_label(s.model_actual)} 구독 · 직접 API 비용 0원{note}"
+    queue_state = f"⚠️지연(최고 {s.oldest_due_age_min}분)" if s.oldest_due_age_min > 30 else "정상"
+    queue = f"· 큐: {queue_state} · 다음 분석 {nxt:%H:%M}"
+    return "\n".join([head, hostline, cand, slot, result, behavior, model, queue])
 
 
 def send_vlm_run_summary(summary: VlmRunSummary, *, send_fn) -> bool:

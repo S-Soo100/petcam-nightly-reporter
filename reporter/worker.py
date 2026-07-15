@@ -6,7 +6,7 @@ motion_score 상위 N개 clip만 claude 분류 — 전량은 clip당 ~12만 토�
 """
 import sys
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -89,43 +89,27 @@ def _maybe_register(sb, clip, label: dict) -> None:
 
 
 def _format(activity: dict, behaviors: dict, now: datetime) -> str:
-    """활동(DB) + 행동(claude 샘플) → Slack 상황판 1카드. 순수 표현 함수."""
-    win_min = int(config.WINDOW_HOURS * 60)
+    """움직임 수집(DB) → Slack 요약 1카드. 순수 표현 함수. VLM 분석 결과가 아님을 명시.
+
+    SAMPLE_TOP_N=0 배포에서는 legacy Claude 호출이 없어 행동 라벨이 없다. 방어적으로
+    sampled>0 & 전량 실패면 조용한 한도실패 경보만 유지(2026-07-07 교훈).
+    """
     if activity["clip_count"] == 0:
-        return f"🦎 최근 {win_min}분: 활동 없음 ({now:%m/%d %H:%M} KST)"
-    peak = f"{activity['peak_hour_kst']}시경 집중" if activity["peak_hour_kst"] is not None else "활동 분산"
-    top = sorted(activity["hourly_kst"].items(), key=lambda kv: -kv[1])[:3]  # 상위 3 시간대
-    dist = " ".join(f"{h}시:{n}" for h, n in top)
-    signals = []
-    if behaviors["shed_observed"]:
-        signals.append("🧬탈피")
-    if behaviors["drink_observed"]:
-        signals.append("💧음수")
-    if behaviors["feeding_observed"]:
-        signals.append("🍽급여")
-    # 샘플 라벨 → 신호 우선순위: (1)claude 인프라 전량실패 경보 (2)특이행동 (3)게코 부재(unseen=
-    # 분석불필요, gate v3 전 대체신호) (4)그 외(moving 등). '특이행동 없음' 과 '게코 안 보임' 을
-    # 구분해야 조용한 한도실패도, 노이즈성 움직임도 리포트만 봐서 판별됨.
-    failed = behaviors["failed_infra"]
+        return f"🦎 움직임 없음 ({now:%m/%d %H:%M} KST)"
+    disp_end = now.replace(minute=0, second=0, microsecond=0)
+    disp_start = disp_end - timedelta(hours=int(config.WINDOW_HOURS))
+    peak = f"{activity['peak_hour_kst']}시" if activity["peak_hour_kst"] is not None else "분산"
+    lines = [
+        f"📊 움직임 수집 요약 ({disp_start:%H:%M}~{disp_end:%H:%M})",
+        f"· 감지 클립 {activity['clip_count']}개 · 약 {activity['active_minutes']}분",
+        f"· 집중 시간대: {peak}",
+        "· 이 메시지는 움직임 수집 통계이며 VLM 분석 결과가 아님",
+    ]
     sampled = behaviors["sampled_count"]
-    unseen = behaviors["unseen"]
-    if sampled == 0:
-        # VLM 샘플링이 꺼진 창(SAMPLE_TOP_N=0 등) — '특이행동 없음'(분석 결론)과 구분해야 오해가 없다.
-        sig = "VLM 샘플링 꺼짐"
-    elif sampled > 0 and failed >= sampled:
-        sig = f"⚠️분석실패 {failed}/{sampled} (claude 한도/인증 — 로그 확인)"
-    elif signals:
-        sig = " ".join(signals) + (f" ⚠️일부실패 {failed}/{sampled}" if failed else "")
-    elif sampled > 0 and unseen >= sampled:
-        sig = "게코 안 보임(분석불필요)"
-    else:
-        sig = "특이행동 없음" + (f" ⚠️일부실패 {failed}/{sampled}" if failed else "")
-    return (
-        f"🦎 최근 {win_min}분 상황판 ({now:%m/%d %H:%M} KST)\n"
-        f"· 움직임 {activity['clip_count']}회 (~{activity['active_minutes']}분)\n"
-        f"· {peak} · 시간대(KST) {dist}\n"
-        f"· 샘플{sampled}: {sig}"
-    )
+    failed = behaviors["failed_infra"]
+    if sampled > 0 and failed >= sampled:
+        lines.append(f"· ⚠️ 샘플 VLM 분석 전량 실패 {failed}/{sampled} (한도/인증 확인)")
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

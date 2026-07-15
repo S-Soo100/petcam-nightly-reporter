@@ -63,6 +63,19 @@ ACTIVITY_POLICY_VERSION = os.environ.get("ACTIVITY_POLICY_VERSION", "activity-v0
 ACTIVITY_WINDOW_HOURS = float(os.environ.get("ACTIVITY_WINDOW_HOURS", "24"))
 ACTIVITY_BATCH_LIMIT = int(os.environ.get("ACTIVITY_BATCH_LIMIT", "200"))
 
+# --- camera_clips 라벨링 격리 제안 worker — 기본은 완전 비활성/쓰기 금지 ---
+LABELING_TRIAGE_ENABLED = os.environ.get("LABELING_TRIAGE_ENABLED", "0") == "1"
+LABELING_TRIAGE_WRITE_ENABLED = os.environ.get("LABELING_TRIAGE_WRITE_ENABLED", "0") == "1"
+LABELING_TRIAGE_POLICY_VERSION = os.environ.get(
+    "LABELING_TRIAGE_POLICY_VERSION", "labeling-triage-v1"
+)
+LABELING_TRIAGE_ACTIVITY_POLICY_VERSION = os.environ.get(
+    "LABELING_TRIAGE_ACTIVITY_POLICY_VERSION", "activity-v1"
+)
+LABELING_TRIAGE_WINDOW_HOURS = float(os.environ.get("LABELING_TRIAGE_WINDOW_HOURS", "168"))
+LABELING_TRIAGE_BATCH_LIMIT = int(os.environ.get("LABELING_TRIAGE_BATCH_LIMIT", "30"))
+LABELING_TRIAGE_FRAMES = int(os.environ.get("LABELING_TRIAGE_FRAMES", "12"))
+
 VLM_ROUTER_ENABLED = os.environ.get("VLM_ROUTER_ENABLED", "0") == "1"
 VLM_PROVIDER = os.environ.get("VLM_PROVIDER", "direct_api")
 VLM_SELECTOR_VERSION = "budget-router-v1"

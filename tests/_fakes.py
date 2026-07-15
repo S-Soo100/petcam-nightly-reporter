@@ -35,6 +35,10 @@ class _Query:
         self._filters.append((col, "gte", val))
         return self
 
+    def gt(self, col, val):
+        self._filters.append((col, "gt", val))
+        return self
+
     def lt(self, col, val):
         self._filters.append((col, "lt", val))
         return self
@@ -114,6 +118,8 @@ class _Query:
             if op == "eq" and rv != val:
                 return False
             if op == "gte" and not (rv is not None and rv >= val):
+                return False
+            if op == "gt" and not (rv is not None and rv > val):
                 return False
             if op == "lt" and not (rv is not None and rv < val):
                 return False

@@ -178,12 +178,12 @@ def test_build_policy_versioned_presets(monkeypatch):
     # 모든 임계값이 policy version 에 묶인다(재현성). config 는 version 선택만.
     from reporter import config as cfg
     monkeypatch.setattr(cfg, "ACTIVITY_POLICY_VERSION", "activity-v1")
-    p1 = activity_worker._build_policy()
+    p1 = activity_worker.build_activity_policy()
     assert p1.version == "activity-v1"
     assert p1.gate_threshold == 0.10          # audit: absent threshold 하향
     assert p1.roi_flow_active == 0.5          # audit: static 미세움직임 회수
     monkeypatch.setattr(cfg, "ACTIVITY_POLICY_VERSION", "activity-v0")
-    p0 = activity_worker._build_policy()
+    p0 = activity_worker.build_activity_policy()
     assert p0.gate_threshold == 0.25 and p0.roi_flow_active == 2.0  # v0 원본(회귀 기준점)
 
 

@@ -104,16 +104,16 @@ _POLICY_PRESETS: dict[str, dict] = {
 }
 
 
-def _build_policy() -> ActivityPolicy:
+def build_activity_policy(version: str | None = None) -> ActivityPolicy:
     """config 가 고른 policy version 의 preset 으로 ActivityPolicy 구성 (임계값 코드 상수 금지, §231)."""
-    version = config.ACTIVITY_POLICY_VERSION
-    preset = _POLICY_PRESETS.get(version)
+    selected = version or config.ACTIVITY_POLICY_VERSION
+    preset = _POLICY_PRESETS.get(selected)
     if preset is None:
-        return ActivityPolicy(version=version, gate_threshold=config.GATE_THRESHOLD)  # 미등록 = config 폴백
-    return ActivityPolicy(version=version, **preset)
+        return ActivityPolicy(version=selected, gate_threshold=config.GATE_THRESHOLD)  # 미등록 = config 폴백
+    return ActivityPolicy(version=selected, **preset)
 
 
-def _acquire_lock():
+def acquire_activity_lock():
     fd = open(_LOCK_PATH, "w")  # noqa: SIM115 — lock 은 프로세스 수명 동안 열려 있어야
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -123,7 +123,7 @@ def _acquire_lock():
         return None
 
 
-def _release_lock(fd) -> None:
+def release_activity_lock(fd) -> None:
     if fd is not None:
         try:
             fcntl.flock(fd, fcntl.LOCK_UN)
@@ -173,7 +173,7 @@ def run(
     now = now or datetime.now(timezone.utc)
     download_fn = download_fn if download_fn is not None else r2.download_clip
     assess_fn = assess_fn if assess_fn is not None else assess_clip
-    lock_fd = _acquire_lock()
+    lock_fd = acquire_activity_lock()
     if lock_fd is None:
         print("[activity] already running (flock) — skip", flush=True)
         return 0
@@ -191,7 +191,7 @@ def run(
                   flush=True)
             return 0
         camera_ids = [s.camera_id for s in matched]
-        policy = _build_policy()
+        policy = build_activity_policy()
         checkpoint = config.GATE_CHECKPOINT_PATH
         model_version = model_version_for(checkpoint)
         ckpt_sha = checkpoint_sha256(checkpoint)
@@ -214,7 +214,7 @@ def run(
         _log(now, len(camera_ids), stats, policy, model_version)
         return 0
     finally:
-        _release_lock(lock_fd)
+        release_activity_lock(lock_fd)
 
 
 if __name__ == "__main__":

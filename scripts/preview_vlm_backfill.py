@@ -36,6 +36,7 @@ def main(
 ) -> int:
     parser = argparse.ArgumentParser(description="VLM 240개 백필 read-only 후보 preview")
     parser.add_argument("--source-date", required=True, type=_source_date)
+    parser.add_argument("--out", type=Path, help="preview JSON 저장 경로")
     args = parser.parse_args(argv)
     sb = sb or create_client(config.SUPABASE_URL, config.SUPABASE_KEY)
     camera_id = choose_target_camera(sb, source_nights())
@@ -46,7 +47,14 @@ def main(
         wave = prepare_fn(sb, args.source_date, camera_id, persist=False)
     finally:
         release_lock_fn(lock)
-    print(json.dumps(wave.to_dict(), ensure_ascii=False, indent=2))
+    payload = wave.to_dict()
+    rendered = json.dumps(payload, ensure_ascii=False, indent=2)
+    if args.out:
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(rendered + "\n")
+        print(f"preview_saved={args.out} selected={len(payload['selected'])}")
+    else:
+        print(rendered)
     return 0
 
 

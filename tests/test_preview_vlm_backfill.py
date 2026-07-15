@@ -61,3 +61,19 @@ def test_preview_fails_closed_when_activity_worker_owns_gate_lock():
     }]})
     with pytest.raises(RuntimeError, match="activity worker busy"):
         main(["--source-date", "2026-07-07"], sb=sb, acquire_lock_fn=lambda: None)
+
+
+def test_preview_can_persist_json_artifact(tmp_path):
+    source_date = source_nights()[0]
+    started_at = bucket_plans(source_date)[0].start
+    sb = FakeSB({"motion_clips": [{
+        "id": "clip", "camera_id": "camera-a", "started_at": started_at.isoformat(),
+        "duration_sec": 30, "r2_key": "clip.mp4",
+    }]})
+    output = tmp_path / "preview.json"
+    assert main(
+        ["--source-date", "2026-07-07", "--out", str(output)], sb=sb,
+        prepare_fn=lambda _sb, day, camera, *, persist: _preview_wave(day, camera),
+        acquire_lock_fn=lambda: object(), release_lock_fn=lambda _lock: None,
+    ) == 0
+    assert len(json.loads(output.read_text())["selected"]) == 30

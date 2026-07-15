@@ -13,6 +13,7 @@
   - 이후 하루씩 증가
   - 2026-07-14 20:00 KST ~ 2026-07-15 04:00 KST
 - source night당 Claude 분석 성공 목표 30개, 총 240개.
+- 대상은 해당 기간 valid clip 수가 가장 많은 주 카메라 한 대다. 전체 UUID를 코드·문서에 하드코딩하지 않고 preflight에서 결정해 실행 로그에만 축약 ID를 남긴다. 소량의 다른 테스트 카메라는 이번 240개에서 제외한다.
 - 오늘 한 시간에 source night 하나씩, 총 8 wave로 실행한다.
 - provider는 `claude_cli_batch`, exact model은 `claude-sonnet-5`다.
 - clip당 6 JPEG, Claude 호출당 최대 4 clip을 유지한다.
@@ -77,6 +78,7 @@ source night index를 `i=0..7`, 시간 bucket index를 `b=0..7`로 둔다. `b=i`
 
 - 전용 임시 LaunchAgent가 오늘만 1시간 간격으로 최대 8회 실행된다.
 - 매 실행은 DB에서 가장 이른 미완료 source night 하나를 결정한다.
+- 직전 source night의 마지막 job 완료 후 55분이 지나기 전에는 다음 source night를 시작하지 않는다. 수동 canary 직후 LaunchAgent `RunAtLoad`가 다시 뜨더라도 두 번째 30개를 즉시 호출하지 않는다.
 - 첫 실행은 2026-07-07 밤, 마지막 실행은 2026-07-14 밤이다.
 - wave 시작 시 selector run/job 30개를 durable하게 만든 뒤 Claude 분석을 시작한다.
 - 개별 R2/프레임 오류는 같은 wave 안에서 최대 1회 재시도한다.
@@ -87,6 +89,7 @@ source night index를 `i=0..7`, 시간 bucket index를 `b=0..7`로 둔다. `b=i`
 ## 6. 동시 실행과 안전 중단
 
 - 정규 VLM worker와 동일한 file lock을 사용해 Claude 호출이 겹치지 않게 한다.
+- local Gate 단계는 activity worker lock이 이미 잡혀 있으면 wave를 미루며, 같은 detector를 두 프로세스가 동시에 돌리지 않는다.
 - 정규 22·00·02·04시 job이 존재하면 정규 job을 먼저 처리하고 backfill은 다음 기회로 미룬다.
 - 다음 조건에서는 현재 wave와 이후 wave를 멈춘다.
   - Claude CLI 인증 실패

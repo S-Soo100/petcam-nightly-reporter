@@ -1,10 +1,10 @@
 # camera_clips 라벨링 격리 제안 Worker 설계
 
-> 상태: Preview 30 완료, owner blind 검토 대기
+> 상태: Owner blind 검토 완료, write canary reject
 > 작성일: 2026-07-15
 > 구현 레포: `petcam-nightly-reporter`
 
-## 0. 현재 상태 (2026-07-15)
+## 0. 현재 상태 (2026-07-16)
 
 - worker·preview CLI·fail-closed LaunchAgent 설치 스크립트 구현 완료
 - 전체 테스트 141개 통과
@@ -16,7 +16,13 @@
   - `unknown` 11건은 안전하게 `label` 유지
   - 다운로드/Gate/임시 파일 실패 0건
 - Preview 전후 triage 상태/event row는 모두 0건으로 DB write가 없었음
-- 다음 승인 경계: owner가 30개 영상을 blind 검토한 뒤 5개 write canary 여부 결정
+- Owner blind 판정: 라벨링 필요 24 / 라벨링 안 함 4 / 판단 어려움 2
+- System quarantine 3건 중 true exclusion 1 / false exclusion 2
+  - `gate_absent`: 1/1 true exclusion(표본 부족)
+  - `gate_static`: 0/2, 모두 owner `라벨링 필요`
+- 안전 기준에 따라 5개 write canary·backfill·write-enabled launchd를 reject
+- production triage/event row는 계속 0건이며 일반 라벨링 큐 변화 없음
+- 다음 단계: `gate_static → quarantine`을 제거한 policy v2와 독립 holdout 설계
 
 ## 1. 목적
 
@@ -167,6 +173,9 @@ Blind 검토 중에는 `OWNER-REVIEW.md`만 사용한다. 시스템 제안·사�
 ### 10.2 Write canary
 
 Preview 승인 후 서로 다른 결과를 포함한 소수 clip만 RPC로 저장한다.
+
+2026-07-16 판정: Preview에서 false exclusion 2건이 발생해 미승인. Policy v2의
+새 독립 holdout이 통과하기 전까지 이 단계로 진행하지 않는다.
 
 - 격리함 pending 노출 확인
 - 일반 큐 제외 확인

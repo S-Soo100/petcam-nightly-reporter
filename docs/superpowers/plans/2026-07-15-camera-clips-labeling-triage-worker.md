@@ -457,8 +457,8 @@ Expected: all tests pass; any `motion_clips` or forbidden write reference in new
 
 1. [x] Apply the lab migration and rollback probes.
 2. [x] Execute Preview 30 with write disabled.
-3. [ ] Owner blind review of all 30.
-4. Approve a 5-clip suggestion write canary.
-5. Verify web queue/quarantine E2E.
-6. Approve a date-bounded backfill.
-7. Only after evidence accumulation, decide whether to install a write-enabled LaunchAgent.
+3. [x] Owner blind review of all 30.
+4. [ ] Approve a 5-clip suggestion write canary — **reject**: 3 quarantine 중 false exclusion 2.
+5. [x] Verify web queue/quarantine E2E.
+6. [ ] Approve a date-bounded backfill — policy v2 독립 holdout 전까지 금지.
+7. [ ] Only after evidence accumulation, decide whether to install a write-enabled LaunchAgent.

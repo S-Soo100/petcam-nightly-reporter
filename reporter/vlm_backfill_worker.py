@@ -69,7 +69,12 @@ class WavePlan:
             "source_date": self.source_date.isoformat(),
             "camera": self.camera_id[:8],
             "selected": [
-                {"clip": item.clip.id[:8], "slot": item.slot.value, "bucket": bucket.plan.bucket_index}
+                {
+                    "clip": item.clip.id[:8],
+                    "slot": item.slot.value,
+                    "bucket": bucket.plan.bucket_index,
+                    "gate_source": item.rank_features["gate_snapshot"].get("source", "missing"),
+                }
                 for bucket in self.buckets for item in bucket.selected
             ],
             "gate_stats": self.gate_stats,
@@ -125,8 +130,14 @@ def blocking_error_for_backfill(sb, camera_id: str) -> str | None:
     return None
 
 
-def _attach_snapshot(item: SelectedCandidate, snapshot: dict[str, object]) -> SelectedCandidate:
-    return replace(item,rank_features={**item.rank_features,"gate_snapshot":snapshot})
+def _attach_snapshot(item: SelectedCandidate, snapshot: dict[str, object], plan: BucketPlan) -> SelectedCandidate:
+    return replace(item,rank_features={
+        **item.rank_features,
+        "source_date": plan.source_date.isoformat(),
+        "bucket_index": plan.bucket_index,
+        "backfill_version": BACKFILL_SELECTOR_VERSION,
+        "gate_snapshot": snapshot,
+    })
 
 
 def prepare_wave(
@@ -154,7 +165,7 @@ def prepare_wave(
     for plan in plans:
         candidates=[enriched[clip.id] for clip in bucket_inputs[plan.bucket_index] if clip.id in enriched]
         selected=select_fn(candidates,plan,history)
-        selected=[_attach_snapshot(item,gate.snapshots.get(item.clip.id,{"source":"missing"})) for item in selected]
+        selected=[_attach_snapshot(item,gate.snapshots.get(item.clip.id,{"source":"missing"}),plan) for item in selected]
         buckets.append(BucketSelection(plan,clips_seen[plan.bucket_index],len(bucket_inputs[plan.bucket_index]),tuple(selected)))
     wave=WavePlan(source_date,camera_id,tuple(buckets),gate.stats)
     selected=wave.selected

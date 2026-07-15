@@ -95,6 +95,10 @@ def test_prepare_wave_creates_8_runs_and_30_jobs_idempotently():
     assert len(sb.store["clip_vlm_selector_runs"]) == 8
     assert len(sb.store["clip_vlm_jobs"]) == 30
     assert all(job["reserved_cost_usd"] == "0" for job in sb.store["clip_vlm_jobs"])
+    assert all(job["rank_features"]["source_date"] == "2026-07-07" for job in sb.store["clip_vlm_jobs"])
+    assert {job["rank_features"]["bucket_index"] for job in sb.store["clip_vlm_jobs"]} == set(range(8))
+    assert all(job["rank_features"]["backfill_version"] == BACKFILL_SELECTOR_VERSION for job in sb.store["clip_vlm_jobs"])
+    assert all(job["rank_features"]["gate_snapshot"]["source"] == "fake" for job in sb.store["clip_vlm_jobs"])
 
 
 def test_completed_wave_advances_and_partial_wave_resumes_same_date():

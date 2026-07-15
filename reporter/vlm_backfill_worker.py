@@ -203,6 +203,16 @@ def run(
         if blocked:print(f"[vlm-backfill] blocked code={blocked}");return 0
         source_date=next_source_date(sb,camera_id,now)
         if source_date is None:print("[vlm-backfill] complete-or-cooldown — no-op");return 0
+        existing=_jobs_in_night(sb,source_date,camera_id)
+        if existing:
+            if len(existing)!=30:
+                print(f"[vlm-backfill] blocked code=incomplete_wave jobs={len(existing)}")
+                return 0
+            plans=bucket_plans(source_date);start=plans[0].start;end=plans[-1].end
+            due=load_due_jobs_for_selector(sb,BACKFILL_SELECTOR_VERSION,start,end)
+            stats=process_fn(sb,due)
+            print(f"[vlm-backfill] resume source={source_date} existing=30 due={len(due)} stats={stats}")
+            return 0
         activity_lock=acquire_activity_lock_fn()
         if activity_lock is None:print("[vlm-backfill] activity worker busy — defer");return 0
         try:wave=prepare_fn(sb,source_date,camera_id,persist=not dry_run)

@@ -63,6 +63,7 @@ def _jobs_for_day(day, *, count: int, status: str = "succeeded", completed_at: d
             "status": status,
             "attempt_count": 1,
             "error_code": None,
+            "queued_at": datetime(2026, 7, 15, 0, tzinfo=timezone.utc).isoformat(),
             "completed_at": (completed_at or datetime(2026, 7, 15, tzinfo=timezone.utc)).isoformat(),
         })
     return rows
@@ -158,3 +159,31 @@ def test_previous_quota_error_blocks_future_backfill_wave():
         acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
         prepare_fn=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("must remain blocked")),
     ) == 0
+
+
+def test_existing_30_job_wave_resumes_without_gate_or_reselection():
+    jobs = _jobs_for_day(source_nights()[0], count=30, status="failed_retryable")
+    start = bucket_plans(source_nights()[0])[0].start
+    sb = FakeSB({"motion_clips": [_motion_clip("a", "camera-a", start)], "clip_vlm_jobs": jobs})
+    calls = []
+    assert run(
+        sb=sb,
+        process_fn=lambda _sb, due: calls.append([job["id"] for job in due]) or {"succeeded": len(due)},
+        acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
+        prepare_fn=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("resume must not reselect")),
+        acquire_activity_lock_fn=lambda: (_ for _ in ()).throw(AssertionError("resume must not run Gate")),
+    ) == 0
+    assert len(calls) == 1
+    assert len(calls[0]) == 30
+
+
+def test_partial_persisted_wave_fails_closed_instead_of_adding_jobs():
+    jobs = _jobs_for_day(source_nights()[0], count=29, status="failed_retryable")
+    start = bucket_plans(source_nights()[0])[0].start
+    sb = FakeSB({"motion_clips": [_motion_clip("a", "camera-a", start)], "clip_vlm_jobs": jobs})
+    assert run(
+        sb=sb,
+        acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
+        prepare_fn=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("partial wave must fail closed")),
+    ) == 0
+    assert len(sb.store["clip_vlm_jobs"]) == 29

@@ -169,11 +169,13 @@ def run(
     load_detector_fn=load_detector,
     download_fn=None,
     assess_fn=None,
+    acquire_lock_fn=acquire_activity_lock,
+    release_lock_fn=release_activity_lock,
 ) -> int:
     now = now or datetime.now(timezone.utc)
     download_fn = download_fn if download_fn is not None else r2.download_clip
     assess_fn = assess_fn if assess_fn is not None else assess_clip
-    lock_fd = acquire_activity_lock()
+    lock_fd = acquire_lock_fn()
     if lock_fd is None:
         print("[activity] already running (flock) — skip", flush=True)
         return 0
@@ -214,7 +216,7 @@ def run(
         _log(now, len(camera_ids), stats, policy, model_version)
         return 0
     finally:
-        release_activity_lock(lock_fd)
+        release_lock_fn(lock_fd)
 
 
 if __name__ == "__main__":

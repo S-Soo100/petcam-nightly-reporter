@@ -112,7 +112,10 @@ def test_process_batch_reruns_idempotent():
 
 def test_run_no_enabled_cameras_writes_nothing():
     sb = FakeSB({})  # 설정 없음 = allowlist 빈
-    rc = activity_worker.run(sb=sb, now=datetime.fromisoformat("2026-07-14T05:00:00+00:00"))
+    rc = activity_worker.run(
+        sb=sb, now=datetime.fromisoformat("2026-07-14T05:00:00+00:00"),
+        acquire_lock_fn=lambda: object(), release_lock_fn=lambda _lock: None,
+    )
     assert rc == 0
     assert "clip_prelabels" not in sb.store  # 아무것도 저장/제외 안 함
 
@@ -218,6 +221,7 @@ def test_run_all_mismatch_skips_without_detector_load(monkeypatch):
     calls = {"det": 0, "dl": 0, "assess": 0}
     rc = activity_worker.run(
         sb=sb, now=_NOW,
+        acquire_lock_fn=lambda: object(), release_lock_fn=lambda _lock: None,
         load_detector_fn=lambda *a, **k: calls.__setitem__("det", calls["det"] + 1),
         download_fn=lambda *a, **k: calls.__setitem__("dl", calls["dl"] + 1),
         assess_fn=lambda *a, **k: calls.__setitem__("assess", calls["assess"] + 1),
@@ -233,6 +237,7 @@ def test_run_null_policy_skips_without_store(monkeypatch):
     sb = FakeSB({"camera_activity_filter_settings": [_srow("cam-A", None)]})
     calls = {"det": 0}
     rc = activity_worker.run(sb=sb, now=_NOW,
+                             acquire_lock_fn=lambda: object(), release_lock_fn=lambda _lock: None,
                              load_detector_fn=lambda *a, **k: calls.__setitem__("det", calls["det"] + 1))
     assert rc == 0 and calls["det"] == 0
     assert "clip_prelabels" not in sb.store
@@ -253,6 +258,7 @@ def test_run_processes_only_matching_policy(monkeypatch):
     calls = {"det": 0}
     rc = activity_worker.run(
         sb=sb, now=_NOW,
+        acquire_lock_fn=lambda: object(), release_lock_fn=lambda _lock: None,
         load_detector_fn=lambda *a, **k: (calls.__setitem__("det", 1), object())[1],
         download_fn=lambda key, dest: Path(dest).write_bytes(b"x"),
         assess_fn=lambda path, det, pol, ck, clip_id, **k: (processed.append(clip_id), _ga(clip_id, "exclude_static"))[1],

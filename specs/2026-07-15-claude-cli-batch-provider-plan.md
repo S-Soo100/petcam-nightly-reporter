@@ -65,7 +65,15 @@
 - [x] launchctl plist/일정/환경과 기존 activity worker 생존을 확인한다.
 - [x] SOT에 실행 시각, 첫 결과, 실패 조건, 롤백 명령을 기록하고 commit/push한다.
 
-## 운영 상태 — 2026-07-15 02:30 KST
+### Task 5: 04시 인증 장애 복구
+
+- [x] 실패한 4개 원본 clip을 같은 24프레임·Sonnet 5로 read-only 재생해 영상·모델·스키마 문제가 아님을 확인한다.
+- [x] 일반 셸에서는 `claude auth status`가 로그인 상태지만, launchd 최소 환경에서는 로그아웃으로 판정되는 현상을 재현한다.
+- [x] LaunchAgent plist에 현재 계정의 `USER`·`LOGNAME`을 넣고, worker 실행 전 인증 preflight와 안전한 오류코드를 추가한다.
+- [x] 실제 GUI launchd domain에서 Max 구독 인증을 재검증한다.
+- [x] 실패한 기존 job 4개만 attempt 2로 재시도해 4/4 성공·오류코드 해제·정확한 모델 저장을 확인한다.
+
+## 운영 상태 — 2026-07-15 08:30 KST
 
 - `com.petcam.vlm-candidate-worker`가 22·00·02·04시 KST에 실행되며 provider는
   `claude_cli_batch`, 모델은 exact `claude-sonnet-5`다.
@@ -74,6 +82,16 @@
   `pricing_version=claude-code-subscription-v1`을 확인했다. 네 결과는 모두 `moving`이었고,
   구독 청구와 별개인 API 환산 비용은 batch 1회 약 `$0.530825`였다. 따라서 파이프라인 가동은
   검증됐지만 후보 utility와 구독 한도 효율은 1박 이상 관찰해야 한다.
+- 02~04시 자동 batch는 후보 4개를 정상 선택했지만 4건 모두 `provider_error`로 끝났다. 원인은
+  인터넷이나 영상이 아니라 LaunchAgent 환경에 `USER`·`LOGNAME`이 없어 Claude CLI가 macOS
+  Keychain 구독 인증을 찾지 못한 것이었다. CLI가 로그아웃 JSON을 exit 0으로 반환해 오류가
+  일반 `provider_error`로 축약되던 관측성 문제도 함께 수정했다.
+- launcher에 `USER`·`LOGNAME`을 추가하고 worker 인증 preflight·안전한 오류코드를 넣은 뒤,
+  GUI launchd domain에서 `loggedIn=true`, `subscriptionType=max`를 확인했다. 인터넷 복구 후
+  실패했던 기존 job 4개만 재시도해 4/4 성공했다. 네 건 모두 attempt 2, `error_code=NULL`,
+  요청/실제 모델 `claude-sonnet-5`로 저장됐다. 판정은 `moving` 3개·`unseen` 1개다.
+- 첫날 검증 세트는 총 8/8 성공이며 판정은 `moving` 7개·`unseen` 1개다. 실제 API 청구액은
+  `$0`; 동일 사용량의 API 환산 참고비용은 두 batch 합계 약 `$1.179497`다.
 - 결과는 `clip_vlm_selector_runs`/`clip_vlm_jobs`에만 저장한다. 앱 하이라이트,
   `behavior_logs`, `camera_clips`, 활동시간에는 반영하지 않는다.
 - launchd 강제 smoke는 이미 처리한 동일 창을 재호출하지 않고 `stats={}`, exit 0으로 끝났다.

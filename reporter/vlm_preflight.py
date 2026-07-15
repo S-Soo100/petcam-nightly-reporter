@@ -100,6 +100,10 @@ def build_payload(checks: list[Check]) -> dict:
 
 def main(argv=None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    # worker 와 동일하게 .env 를 로드해 required_env 를 실제 런타임 기준으로 검사.
+    from pathlib import Path
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
     checks = run_preflight()
     payload = build_payload(checks)
     if "--json" in argv:

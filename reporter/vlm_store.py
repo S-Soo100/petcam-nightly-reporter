@@ -12,3 +12,12 @@ def load_due_jobs(sb,limit=64):
     for status in ("queued","failed_retryable"):
         rows+=sb.table("clip_vlm_jobs").select("*").eq("status",status).order("queued_at").limit(limit).execute().data
     return rows[:limit]
+
+def load_due_jobs_for_selector(sb,selector_version,start=None,end=None,limit=64):
+    rows=[]
+    for status in ("queued","failed_retryable"):
+        q=sb.table("clip_vlm_jobs").select("*").eq("selector_version",selector_version).eq("status",status)
+        if start is not None:q=q.gte("window_start",start.isoformat())
+        if end is not None:q=q.lt("window_start",end.isoformat())
+        rows+=q.order("queued_at").limit(limit).execute().data
+    return rows[:limit]

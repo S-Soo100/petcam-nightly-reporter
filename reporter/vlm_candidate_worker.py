@@ -52,18 +52,21 @@ def _night_counts(sb,night_start,night_end):
     counts=defaultdict(int)
     for row in rows:counts[row["camera_id"]]+=1
     return len(rows),dict(counts)
-def _lock():
+def acquire_vlm_lock():
     f=open(LOCK,"w")
     try:fcntl.flock(f,fcntl.LOCK_EX|fcntl.LOCK_NB);return f
     except BlockingIOError:f.close();return None
+def release_vlm_lock(lock):
+    if lock is not None:
+        fcntl.flock(lock,fcntl.LOCK_UN);lock.close()
 def _month_start(now):
     k=now.astimezone(ZoneInfo("Asia/Seoul"));return k.replace(day=1,hour=0,minute=0,second=0,microsecond=0).astimezone(timezone.utc)
 def _ledger(sb,now):
     rows=sb.table("clip_vlm_jobs").select("status,cost_usd,reserved_cost_usd").gte("created_at",_month_start(now).isoformat()).execute().data
     actual=sum(float(r.get("cost_usd") or 0) for r in rows);reserved=sum(float(r.get("reserved_cost_usd") or 0) for r in rows if r.get("status") in {"submitted","failed_retryable"});return actual,reserved
-def _jobs(selected,run_id):
+def build_job_rows(selected,run_id,provider=None):
     ph=hashlib.sha256(SYSTEM_PROMPT.encode()).hexdigest();out=[]
-    cli=config.VLM_PROVIDER=="claude_cli_batch"
+    cli=(provider or config.VLM_PROVIDER)=="claude_cli_batch"
     for s in selected:out.append({"clip_id":s.clip.id,"slot":s.slot.value,"episode_key":s.episode_key,"rank_features":s.rank_features,"selection_reason":s.selection_reason,"activity_assessment_id":s.clip.assessment_id or "","prelabel_id":s.clip.prelabel_id or "","model_requested":config.VLM_MODEL,"prompt_version":config.VLM_PROMPT_VERSION,"prompt_sha256":ph,"sampler_version":config.VLM_SAMPLER_VERSION,"reserved_cost_usd":"0" if cli else str(config.VLM_RESERVED_COST_USD),"pricing_version":"claude-code-subscription-v1" if cli else "anthropic-sonnet5-intro-through-2026-08-31"})
     return out
 
@@ -146,7 +149,7 @@ def process_jobs(sb,jobs,client):
 def run(*,sb=None,now=None,enabled=None,client=None):
     enabled=config.VLM_ROUTER_ENABLED if enabled is None else enabled
     if not enabled:print("[vlm-router] disabled — skip");return 0
-    now=now or datetime.now(ZoneInfo("Asia/Seoul"));start,end=trigger_window(now);lock=_lock()
+    now=now or datetime.now(ZoneInfo("Asia/Seoul"));start,end=trigger_window(now);lock=acquire_vlm_lock()
     if lock is None:return 0
     try:
         sb=sb or create_client(config.SUPABASE_URL,config.SUPABASE_KEY);actual,reserved=_ledger(sb,now);clips=load_window_candidates(sb,start,end,config.VLM_ACTIVITY_POLICY_VERSION,config.VLM_SELECTOR_VERSION);groups=defaultdict(list)
@@ -159,9 +162,9 @@ def run(*,sb=None,now=None,enabled=None,client=None):
         capped=cap_night_selections(selected_by_camera,camera_counts,max(0,config.VLM_MAX_PER_NIGHT-night_total))
         for cam in sorted(groups):
             reasons,reps=contexts[cam];selected=capped[cam]
-            runrow={"camera_id":cam,"window_start":start.isoformat(),"window_end":end.isoformat(),"selector_version":config.VLM_SELECTOR_VERSION,"clips_seen":len(groups[cam]),"hard_invalid_count":reasons.get("invalid_input",0),"already_processed_count":sum(v for k,v in reasons.items() if k!="invalid_input"),"episode_count":len(reps),"pool_counts":{},"selected_clip_ids":[s.clip.id for s in selected],"unselected_reason_counts":reasons,"monthly_budget_usd":str(config.VLM_MONTHLY_BUDGET_USD),"month_reserved_usd":str(reserved),"month_actual_usd":str(actual),"producer_host":socket.gethostname(),"producer_run_id":f"{now:%Y%m%dT%H%M%S}"};create_run_and_jobs(sb,runrow,_jobs(selected,runrow["producer_run_id"]))
+            runrow={"camera_id":cam,"window_start":start.isoformat(),"window_end":end.isoformat(),"selector_version":config.VLM_SELECTOR_VERSION,"clips_seen":len(groups[cam]),"hard_invalid_count":reasons.get("invalid_input",0),"already_processed_count":sum(v for k,v in reasons.items() if k!="invalid_input"),"episode_count":len(reps),"pool_counts":{},"selected_clip_ids":[s.clip.id for s in selected],"unselected_reason_counts":reasons,"monthly_budget_usd":str(config.VLM_MONTHLY_BUDGET_USD),"month_reserved_usd":str(reserved),"month_actual_usd":str(actual),"producer_host":socket.gethostname(),"producer_run_id":f"{now:%Y%m%dT%H%M%S}"};create_run_and_jobs(sb,runrow,build_job_rows(selected,runrow["producer_run_id"]))
         due=load_due_jobs(sb,config.VLM_MAX_PER_NIGHT)
         stats=process_cli_jobs(sb,due) if config.VLM_PROVIDER=="claude_cli_batch" else process_jobs(sb,due,client or Anthropic())
         print(f"[vlm-router] provider={config.VLM_PROVIDER} window={start.isoformat()}..{end.isoformat()} clips={len(clips)} stats={stats}");return 0
-    finally:fcntl.flock(lock,fcntl.LOCK_UN);lock.close()
+    finally:release_vlm_lock(lock)
 if __name__=="__main__":raise SystemExit(run())

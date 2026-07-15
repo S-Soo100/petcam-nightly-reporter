@@ -139,7 +139,7 @@ class FakeSB:
             jobs=self.store.setdefault("clip_vlm_jobs",[])
             for j in args["p_jobs"]:
                 if not any(x.get("clip_id")==j.get("clip_id") and x.get("selector_version")==run.get("selector_version") for x in jobs):
-                    row={**j,"id":f"clip_vlm_jobs-{len(jobs)}","selector_run_id":hit["id"],"camera_id":run["camera_id"],"selector_version":run["selector_version"],"status":"queued","attempt_count":0};jobs.append(row)
+                    row={**j,"id":f"clip_vlm_jobs-{len(jobs)}","selector_run_id":hit["id"],"camera_id":run["camera_id"],"selector_version":run["selector_version"],"window_start":run["window_start"],"window_end":run.get("window_end"),"producer_host":run.get("producer_host"),"producer_run_id":run.get("producer_run_id"),"status":"queued","attempt_count":0,"queued_at":f"2026-07-15T00:00:{len(jobs):02d}+00:00","completed_at":None,"error_code":None};jobs.append(row)
             return _RpcResult(hit["id"])
         if name == "fn_reserve_clip_vlm_job":
             job=next(x for x in self.store.get("clip_vlm_jobs",[]) if x["id"]==args["p_job_id"]);job["status"]="submitted";job["attempt_count"]+=1;return _RpcResult(True)

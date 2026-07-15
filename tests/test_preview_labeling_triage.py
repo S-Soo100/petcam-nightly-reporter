@@ -44,6 +44,14 @@ def test_artifacts_are_reviewable_without_secrets_or_absolute_paths(tmp_path: Pa
     assert (tmp_path / "preview.json").exists()
     assert (tmp_path / "preview.csv").exists()
     assert (tmp_path / "REPORT.md").exists()
+    assert (tmp_path / "OWNER-REVIEW.md").exists()
+    owner_review = (tmp_path / "OWNER-REVIEW.md").read_text()
+    assert "review/00000000.mp4" in owner_review
+    assert "시스템 제안" not in owner_review
+    assert "quarantine" not in owner_review
+    assert "gate_absent" not in owner_review
+    assert "게코가 감지되지 않음" not in owner_review
+    assert "evidence_identity" not in owner_review
     combined = "\n".join(p.read_text() for p in (
         tmp_path / "preview.json", tmp_path / "preview.csv", tmp_path / "REPORT.md"
     ))

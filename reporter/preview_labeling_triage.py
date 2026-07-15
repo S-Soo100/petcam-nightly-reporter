@@ -74,6 +74,23 @@ def write_preview_artifacts(output: Path, rows: list[dict], stats: dict) -> None
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()
         writer.writerows(rows)
+    owner_lines = [
+        "# Owner blind review",
+        "",
+        "> 자동 판정 결과는 숨겨져 있어. 각 영상을 먼저 보고 `라벨링 필요 / 라벨링 안 함 / 판단 어려움` 중 하나를 적어.",
+        "> 30개를 모두 판정하기 전에는 `REPORT.md`, `preview.csv`, `preview.json`을 열지 마.",
+        "",
+        "| # | clip8 | 촬영 시각 | 카메라 | 검토 영상 | owner 판정 |",
+        "|---:|---|---|---|---|---|",
+    ]
+    for i, row in enumerate(rows, 1):
+        owner_lines.append(
+            f"| {i} | {row['clip8']} | {row['captured_at']} | {row['camera_id'][:8]} | "
+            f"[{row['review_file']}]({row['review_file']}) |  |"
+        )
+    (output / "OWNER-REVIEW.md").write_text(
+        "\n".join(owner_lines) + "\n", encoding="utf-8"
+    )
     lines = [
         "# Labeling triage Preview 30",
         "",

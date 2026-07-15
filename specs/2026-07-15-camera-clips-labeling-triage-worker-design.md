@@ -147,7 +147,7 @@ worker가 테이블에 직접 `upsert`하지 않는다.
 
 - DB와 R2는 read-only
 - 후보 30개를 날짜·시간대가 한쪽에 몰리지 않게 선정
-- 결과는 로컬 CSV/JSON과 사람이 볼 HTML 또는 Markdown 보고서로 저장
+- 결과는 시스템 분석용 CSV/JSON/보고서와 제안을 숨긴 `OWNER-REVIEW.md`로 분리 저장
 - 각 행: clip8, 촬영 시각, 카메라, 제안, 쉬운 사유, 최소 provenance
 - triage DB write 0건
 - 원본 GT/behavior write 0건
@@ -160,6 +160,9 @@ owner가 영상을 blind로 확인해 다음을 기록한다.
 - 라벨링 필요
 - 라벨링 안 함
 - 판단 어려움
+
+Blind 검토 중에는 `OWNER-REVIEW.md`만 사용한다. 시스템 제안·사유·identity가
+있는 `REPORT.md`, `preview.csv`, `preview.json`은 30개 판정을 마친 뒤에만 연다.
 
 ### 10.2 Write canary
 

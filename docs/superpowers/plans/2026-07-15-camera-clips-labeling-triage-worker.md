@@ -358,9 +358,11 @@ The command creates:
 preview.json
 preview.csv
 REPORT.md
+OWNER-REVIEW.md
 ```
 
 Artifacts contain clip8, captured_at, camera_id, suggested route/reason, display reason, evidence identity, and relative local review filename only. They must not contain Supabase keys, R2 credentials, signed URLs, full local home path, or owner email.
+`OWNER-REVIEW.md`는 이 중 시스템 제안·사유·evidence를 제외하고 상대 영상 링크와 owner 판정 칸만 제공한다.
 
 - [x] **Step 3: Run RED**
 

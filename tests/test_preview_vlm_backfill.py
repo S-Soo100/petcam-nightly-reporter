@@ -32,15 +32,32 @@ def test_preview_returns_30_without_db_or_claude_write(capsys):
         calls.append((source_date, camera_id, persist))
         return _preview_wave(source_date, camera_id)
 
-    assert main(["--source-date", "2026-07-07"], sb=sb, prepare_fn=prepare) == 0
+    locks = []
+    assert main(
+        ["--source-date", "2026-07-07"], sb=sb, prepare_fn=prepare,
+        acquire_lock_fn=lambda: locks.append("acquired") or object(),
+        release_lock_fn=lambda _lock: locks.append("released"),
+    ) == 0
     payload = json.loads(capsys.readouterr().out)
     assert len(payload["selected"]) == 30
     assert calls == [(source_nights()[0], "camera-a", False)]
     assert sb.store.get("clip_vlm_selector_runs", []) == []
     assert sb.store.get("clip_vlm_jobs", []) == []
     assert BACKFILL_SELECTOR_VERSION not in json.dumps(sb.store)
+    assert locks == ["acquired", "released"]
 
 
 def test_preview_rejects_dates_outside_frozen_allowlist():
     with pytest.raises(SystemExit):
         main(["--source-date", "2026-07-15"], sb=FakeSB())
+
+
+def test_preview_fails_closed_when_activity_worker_owns_gate_lock():
+    source_date = source_nights()[0]
+    started_at = bucket_plans(source_date)[0].start
+    sb = FakeSB({"motion_clips": [{
+        "id": "clip", "camera_id": "camera-a", "started_at": started_at.isoformat(),
+        "duration_sec": 30, "r2_key": "clip.mp4",
+    }]})
+    with pytest.raises(RuntimeError, match="activity worker busy"):
+        main(["--source-date", "2026-07-07"], sb=sb, acquire_lock_fn=lambda: None)

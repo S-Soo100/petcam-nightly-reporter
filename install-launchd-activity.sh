@@ -13,6 +13,14 @@ LABEL="com.petcam.activity-worker"
 POLICY_VERSION="activity-v1"
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# --- fail-closed production host guard(§5.2) ---
+# production host 는 검증된 Mac mini 한 대뿐. 현재 hostname 을 expected 로 자동 복사하지 않는다(자기 승인 금지).
+# 배포자가 ACTIVITY_EXPECTED_HOST 를 명시해야 하고, 실제 hostname 과 정확히 일치할 때만 설치한다.
+EXPECTED_HOST="${ACTIVITY_EXPECTED_HOST:-}"
+ACTUAL_HOST="$(hostname)"
+[ -n "$EXPECTED_HOST" ] || { echo "❌ ACTIVITY_EXPECTED_HOST required (verified Mac mini hostname) — 설치 중단" >&2; exit 1; }
+[ "$ACTUAL_HOST" = "$EXPECTED_HOST" ] || { echo "❌ hostname mismatch — non-expected host 에서 설치 거부" >&2; exit 1; }
+
 UV_BIN="$(command -v uv || true)"
 if [ -z "$UV_BIN" ]; then
   echo "❌ uv 를 PATH 에서 못 찾음 — 'command -v uv' 확인 후 재시도" >&2
@@ -45,6 +53,7 @@ cat > "$PLIST" <<PLISTEOF
     <dict>
         <key>PATH</key><string>$LAUNCHD_PATH</string>
         <key>ACTIVITY_POLICY_VERSION</key><string>$POLICY_VERSION</string>
+        <key>ACTIVITY_EXPECTED_HOST</key><string>$EXPECTED_HOST</string>
     </dict>
 </dict>
 </plist>
@@ -63,6 +72,7 @@ launchctl bootstrap "gui/$(id -u)" "$PLIST"
 echo "✅ installed + bootstrapped: $PLIST"
 echo "   PATH=$LAUNCHD_PATH"
 echo "   ACTIVITY_POLICY_VERSION=$POLICY_VERSION"
+echo "   ACTIVITY_EXPECTED_HOST=$EXPECTED_HOST"
 echo "   즉시 1회(RunAtLoad) + 1시간마다. 설정 없으면 0건 종료(앱 제외 없음)."
 echo "   로그:  tail -f /tmp/activity-worker.log"
 echo "   상태:  launchctl print gui/\$(id -u)/$LABEL | grep -Ei 'state|last exit'"

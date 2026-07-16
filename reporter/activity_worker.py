@@ -33,6 +33,7 @@ from reporter.activity_store import (
     store_evidence_and_assessment,
 )
 from reporter.gate_runner import assess_clip, load_detector, model_version_for
+from reporter.vlm_host_guard import HostOwnershipError, require_expected_host
 
 _LOCK_PATH = "/tmp/petcam-activity-worker.lock"
 _EMPTY_DECISIONS = {"active": 0, "exclude_absent": 0, "exclude_static": 0, "unknown": 0}
@@ -89,7 +90,9 @@ def process_batch(
                 stats["durations"].append(time.monotonic() - t0)
             except Exception as e:  # noqa: BLE001 — clip 격리, batch 계속 (DB/R2/decode 오류)
                 stats["failed"] += 1
-                print(f"[activity] clip {c.id[:8]} skip: {type(e).__name__}: {e}",
+                # §5.3 로그 위생: 예외 전문({e})은 DB/HTTP 오류에 URL·secret 이 섞일 수 있어
+                # 타입명만 남긴다. 실패량은 아래 summary 의 fail= 로 집계.
+                print(f"[activity] clip {c.id[:8]} skip: {type(e).__name__}",
                       file=sys.stderr, flush=True)
             finally:
                 dest.unlink(missing_ok=True)  # 임시 mp4 즉시 정리 (TemporaryDirectory 는 2차 방어)
@@ -171,8 +174,18 @@ def run(
     assess_fn=None,
     acquire_lock_fn=acquire_activity_lock,
     release_lock_fn=release_activity_lock,
+    hostname_fn=socket.gethostname,
+    expected_host=None,
 ) -> int:
     now = now or datetime.now(timezone.utc)
+    # §5.1 fail-closed host guard: lock·create_client·DB·R2·detector·Slack 이전에 먼저 판정.
+    # installer 자동 승인 방지 위해 expected 는 배포자가 명시한 config 값을 쓴다(short↔FQDN 자동 동치 금지).
+    expected = config.ACTIVITY_EXPECTED_HOST if expected_host is None else expected_host
+    try:
+        require_expected_host(hostname_fn(), expected)
+    except HostOwnershipError as e:
+        print(f"[activity] host guard fail-closed: {e}", flush=True)
+        return 2
     download_fn = download_fn if download_fn is not None else r2.download_clip
     assess_fn = assess_fn if assess_fn is not None else assess_clip
     lock_fd = acquire_lock_fn()
@@ -214,7 +227,9 @@ def run(
             model_version=model_version, checkpoint_sha=ckpt_sha,
         )
         _log(now, len(camera_ids), stats, policy, model_version)
-        return 0
+        # §5.3: 성공 clip 결과는 유지하되, 하나라도 실패하면 cycle 을 정상(exit 0)으로 숨기지 않는다.
+        # 모든 clip 이 ok/reused 일 때만 0. early-return(카메라·clip 없음)은 실패 아님 → 위에서 0.
+        return 1 if stats["failed"] else 0
     finally:
         release_lock_fn(lock_fd)
 

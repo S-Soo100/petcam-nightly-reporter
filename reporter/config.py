@@ -62,6 +62,10 @@ GATE_THRESHOLD = float(os.environ.get("GATE_THRESHOLD", "0.25"))
 ACTIVITY_POLICY_VERSION = os.environ.get("ACTIVITY_POLICY_VERSION", "activity-v0")
 ACTIVITY_WINDOW_HOURS = float(os.environ.get("ACTIVITY_WINDOW_HOURS", "24"))
 ACTIVITY_BATCH_LIMIT = int(os.environ.get("ACTIVITY_BATCH_LIMIT", "200"))
+# activity worker fail-closed host guard(§5.1). 검증된 Mac mini hostname 을 명시해야 worker 가
+# lock/DB/R2/detector/Slack 을 건드린다. 미설정/불일치면 side effect 이전에 nonzero 종료.
+# installer 가 현재 hostname 을 자동 승인하지 못하도록 expected 는 배포자가 명시한 값을 쓴다.
+ACTIVITY_EXPECTED_HOST = os.environ.get("ACTIVITY_EXPECTED_HOST", "")
 
 # --- camera_clips 라벨링 격리 제안 worker — 기본은 완전 비활성/쓰기 금지 ---
 LABELING_TRIAGE_ENABLED = os.environ.get("LABELING_TRIAGE_ENABLED", "0") == "1"

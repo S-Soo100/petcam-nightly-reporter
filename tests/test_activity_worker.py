@@ -29,6 +29,8 @@ from reporter.indexer import ClipMeta
 
 POL = ActivityPolicy(version="activity-v0", gate_threshold=0.25)
 PROD = ProducerInfo(host="host", run_id="run-1")
+# host guard(§5.1)는 run() 최상단에서 실행되므로 non-guard run() 테스트는 일치 host 를 주입해 통과시킨다.
+_GUARD = dict(hostname_fn=lambda: "h", expected_host="h")
 
 
 def _clip(cid):
@@ -115,6 +117,7 @@ def test_run_no_enabled_cameras_writes_nothing():
     rc = activity_worker.run(
         sb=sb, now=datetime.fromisoformat("2026-07-14T05:00:00+00:00"),
         acquire_lock_fn=lambda: object(), release_lock_fn=lambda _lock: None,
+        **_GUARD,
     )
     assert rc == 0
     assert "clip_prelabels" not in sb.store  # 아무것도 저장/제외 안 함
@@ -225,6 +228,7 @@ def test_run_all_mismatch_skips_without_detector_load(monkeypatch):
         load_detector_fn=lambda *a, **k: calls.__setitem__("det", calls["det"] + 1),
         download_fn=lambda *a, **k: calls.__setitem__("dl", calls["dl"] + 1),
         assess_fn=lambda *a, **k: calls.__setitem__("assess", calls["assess"] + 1),
+        **_GUARD,
     )
     assert rc == 0
     assert calls == {"det": 0, "dl": 0, "assess": 0}  # detector 미로드·다운로드/추론 0회
@@ -238,7 +242,8 @@ def test_run_null_policy_skips_without_store(monkeypatch):
     calls = {"det": 0}
     rc = activity_worker.run(sb=sb, now=_NOW,
                              acquire_lock_fn=lambda: object(), release_lock_fn=lambda _lock: None,
-                             load_detector_fn=lambda *a, **k: calls.__setitem__("det", calls["det"] + 1))
+                             load_detector_fn=lambda *a, **k: calls.__setitem__("det", calls["det"] + 1),
+                             **_GUARD)
     assert rc == 0 and calls["det"] == 0
     assert "clip_prelabels" not in sb.store
 
@@ -262,8 +267,111 @@ def test_run_processes_only_matching_policy(monkeypatch):
         load_detector_fn=lambda *a, **k: (calls.__setitem__("det", 1), object())[1],
         download_fn=lambda key, dest: Path(dest).write_bytes(b"x"),
         assess_fn=lambda path, det, pol, ck, clip_id, **k: (processed.append(clip_id), _ga(clip_id, "exclude_static"))[1],
+        **_GUARD,
     )
     assert rc == 0
     assert calls["det"] == 1  # 일치 카메라 있어 detector 로드
     assert processed == ["a1"]  # cam-A(일치) clip 만 처리, cam-B(불일치) 제외
     assert {r["clip_id"] for r in sb.store["clip_prelabels"]} == {"a1"}
+
+
+# --- §5.1 fail-closed host guard ---
+def _mc_row(cid, cam="cam-A", key="k"):
+    return {"id": cid, "camera_id": cam, "started_at": "2026-07-14T01:00:00+00:00",
+            "duration_sec": 10.0, "r2_key": key, "motion_score": 0.1}
+
+
+def test_run_host_match_proceeds(monkeypatch):
+    # 일치 host + 빈 카메라 → 정상 진행(rc 0), guard 가 막지 않음
+    sb = FakeSB({})
+    rc = activity_worker.run(sb=sb, now=_NOW,
+                             acquire_lock_fn=lambda: object(), release_lock_fn=lambda _lock: None,
+                             hostname_fn=lambda: "mac-mini.verified", expected_host="mac-mini.verified")
+    assert rc == 0
+    assert "clip_prelabels" not in sb.store
+
+
+def test_run_blank_expected_host_fails_closed(monkeypatch):
+    # expected host 공백 → side effect 전 실패. sb 미주입이라 create_client 도 불려선 안 됨.
+    calls = {"lock": 0, "create": 0, "det": 0}
+    monkeypatch.setattr(activity_worker, "create_client",
+                        lambda *a, **k: calls.__setitem__("create", calls["create"] + 1))
+    rc = activity_worker.run(
+        now=_NOW,
+        acquire_lock_fn=lambda: calls.__setitem__("lock", calls["lock"] + 1),
+        release_lock_fn=lambda _lock: None,
+        load_detector_fn=lambda *a, **k: calls.__setitem__("det", calls["det"] + 1),
+        hostname_fn=lambda: "mac-mini.verified", expected_host="",
+    )
+    assert rc != 0
+    assert calls == {"lock": 0, "create": 0, "det": 0}  # lock/DB/detector 이전에 fail-closed
+
+
+def test_run_host_mismatch_stops_before_side_effects(monkeypatch):
+    # hostname 불일치 → detector/load/download/store 호출 0회
+    calls = {"lock": 0, "create": 0, "det": 0, "dl": 0, "assess": 0}
+    monkeypatch.setattr(activity_worker, "create_client",
+                        lambda *a, **k: calls.__setitem__("create", calls["create"] + 1))
+    rc = activity_worker.run(
+        now=_NOW,
+        acquire_lock_fn=lambda: calls.__setitem__("lock", calls["lock"] + 1),
+        release_lock_fn=lambda _lock: None,
+        load_detector_fn=lambda *a, **k: calls.__setitem__("det", calls["det"] + 1),
+        download_fn=lambda *a, **k: calls.__setitem__("dl", calls["dl"] + 1),
+        assess_fn=lambda *a, **k: calls.__setitem__("assess", calls["assess"] + 1),
+        hostname_fn=lambda: "macbook.local", expected_host="mac-mini.verified",
+    )
+    assert rc != 0
+    assert calls == {"lock": 0, "create": 0, "det": 0, "dl": 0, "assess": 0}
+
+
+# --- §5.3 partial-failure 관측성 ---
+def _run_with_clips(monkeypatch, clip_ids, dl_fn):
+    monkeypatch.setattr("reporter.config.ACTIVITY_POLICY_VERSION", "activity-v1")
+    sb = FakeSB({"camera_activity_filter_settings": [_srow("cam-A", "activity-v1")],
+                 "motion_clips": [_mc_row(cid, key=f"k-{cid}") for cid in clip_ids]})
+    rc = activity_worker.run(
+        sb=sb, now=_NOW,
+        acquire_lock_fn=lambda: object(), release_lock_fn=lambda _lock: None,
+        load_detector_fn=lambda *a, **k: object(),
+        download_fn=dl_fn,
+        assess_fn=lambda path, det, pol, ck, clip_id, **k: _ga(clip_id, "exclude_static"),
+        **_GUARD,
+    )
+    return rc, sb
+
+
+def test_run_all_ok_returns_zero(monkeypatch):
+    rc, sb = _run_with_clips(monkeypatch, ["a1", "a2"], lambda key, dest: Path(dest).write_bytes(b"x"))
+    assert rc == 0
+    assert {r["clip_id"] for r in sb.store["clip_prelabels"]} == {"a1", "a2"}
+
+
+def test_run_partial_failure_returns_nonzero_but_keeps_ok(monkeypatch):
+    def dl(key, dest):
+        if key == "k-a2":
+            raise RuntimeError("download boom")
+        Path(dest).write_bytes(b"x")
+    rc, sb = _run_with_clips(monkeypatch, ["a1", "a2", "a3"], dl)
+    assert rc != 0  # 하나라도 실패하면 cycle 을 정상으로 숨기지 않는다
+    assert {r["clip_id"] for r in sb.store["clip_prelabels"]} == {"a1", "a3"}  # 성공 clip 은 유지
+
+
+def test_run_all_fail_returns_nonzero(monkeypatch):
+    def dl(key, dest):
+        raise RuntimeError("boom")
+    rc, sb = _run_with_clips(monkeypatch, ["a1", "a2"], dl)
+    assert rc != 0
+    assert "clip_prelabels" not in sb.store
+
+
+def test_clip_skip_log_omits_exception_detail(monkeypatch, capsys):
+    secret = "https://acct.r2.cloudflarestorage.com/bucket?token=SECRET123"
+    def dl(key, dest):
+        raise RuntimeError(secret)
+    _run_with_clips(monkeypatch, ["a1"], dl)
+    captured = capsys.readouterr()
+    combined = captured.out + captured.err
+    assert secret not in combined  # 예외 전문/URL/secret 미출력
+    assert "SECRET123" not in combined and "cloudflarestorage" not in combined
+    assert "RuntimeError" in combined  # 타입명은 진단용으로 남긴다

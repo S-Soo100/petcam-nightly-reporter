@@ -3,6 +3,13 @@
 > 정본: `docs/superpowers/plans/2026-07-16-vlm-single-host-operations-hardening.md` + `specs/2026-07-16-vlm-single-host-operations-hardening-design.md`
 > Slack 운영 개편: `docs/superpowers/plans/2026-07-16-vlm-slack-operations-cleanup.md` · 감사: `reports/vlm-backfill-progress-20260716/REPORT.md`
 
+## activity-worker 단일 호스트 이전 (2026-07-16, VERIFIED)
+
+- **runtime = Mac mini** (`baeg-endeuui-Macmini.local`), service `com.petcam.activity-worker` loaded. MacBook(`BaekBook-Pro-14-M5.local`) 는 absent(plist 비파괴 백업 `~/Library/LaunchAgents/activity-worker-decommissioned-20260716-162235/`). 두 호스트 전체 loaded 수 = 1.
+- **final HEAD** = `3610f15c753a248679c5b1897e140320b1b97a5a` (origin/main, fast-forward). fix: host guard(`ACTIVITY_EXPECTED_HOST` fail-closed) + partial-failure nonzero exit + 로그 위생.
+- **첫 실사이클(VERIFIED)**: `cameras=3 queried=88 ok=88 fail=0 active=61 absent=2 static=5 unknown=20` exit 0, policy=activity-v1, model=gecko_v2. DB assessments/prelabels +88(전량 Mac mini producer), evidence 7컬럼 결손 0·중복 0. exclusion settings·behavior_labels(258)·clip_vlm_jobs(229) 불변.
+- 정본: `specs/2026-07-16-activity-worker-single-host-design.md` · `docs/superpowers/plans/2026-07-16-activity-worker-single-host-migration.md`.
+
 ## 배포 상태 (2026-07-16 04:xx KST) — deployed, 실사이클 검증 대기
 
 - **커밋/push 완료**: nightly `6bbdd55`(Slack 4종 + preflight fix), lab `26ba0ed`(router 억제). main==origin/main.

@@ -77,3 +77,18 @@
 3. (개선) Mac mini backfill plist 가 아직 구 hourly — worker guard 로 무해하나 daytime calendar 재설치 필요.
 4. (관측성 공백) backfill 진행률을 알리는 Slack 메시지 부재 → 이번 작업으로 신설.
 5. (무결성) crossover 0 / 중복 0 / held 0 / non-exact model 0 — 데이터 건전.
+
+---
+
+## 부록 — 진행률 의미 정정 + 실측 재확인 (2026-07-16 09:2x KST)
+
+검수에서 "완료 78/240·남은 162" 표시가 worker 진행 계약과 불일치함이 발견돼 진행률 필드를 재정의했다.
+- **처리 = succeeded + failed_terminal**(worker COMPLETE_STATUSES) · **남은 처리 = 240 − 처리**(영구실패 미포함) · **미생성 = 240 − created** · **진행 중 = queued+retryable+held+processing**.
+- 실제 aggregate 코드를 live DB 로 실행해 formatter=DB 직접 대조(read-only):
+
+| created | succeeded | terminal | in_progress | 처리 | 남은 처리 | 미생성 |
+|--|--|--|--|--|--|--|
+| 120 | 100 | 12 | 8 | **112/240** | **128** | 120 |
+
+- ETA 는 succeeded 가 아니라 **남은 처리량** 기준. failed_terminal 12건은 재큐잉하지 않음(표시만 정정).
+- 최종 메시지 계약: `처리 240/240 (성공 N · 영구실패 M) · 남은 처리 0`.

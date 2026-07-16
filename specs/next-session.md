@@ -43,3 +43,11 @@ Task 1~10 을 TDD 로 구현·검증 완료 후 위와 같이 배포됨.
 ## 다음 승인 경계
 
 Task 11 Gate A(commit/push) → B(migration apply) → C(Mac mini preflight) → D(single-host handoff) → E(one-window canary) → F(backfill 유지 판단) → G(overnight acceptance) 순으로 **한 단계씩** 사용자 승인 후 진행.
+
+## 2026-07-16 (2) — Slack 후속 하드닝 4건 (deployed, dedup 실사이클 대기)
+
+- **backfill 진행률 의미 정정**(deployed): 처리(succeeded+terminal)/성공/영구실패/진행중/미생성/남은처리 분리. 남은 처리=240−처리(영구실패 미포함). ETA=남은 처리 기준. formatter=live DB 직접 대조 통과(처리 112/240·남은 128·미생성 120).
+- **정규 VLM Slack durable dedup**(deployed): (selector+window_start+window_end+host) 원자 claim. migration `2026-07-16_vlm_slack_notifications`(fn_claim/fn_release) **production 적용 완료**(advisor 신규 critical 0, INFO rls_no_policy=service_role infra 의도). Slack 실패 시 claim 해제→재전송. 다음 22:00 candidate cycle 로 실검증.
+- **API 비용 정직성**(deployed): cost>0 이면 실제 USD+경고, 0일 때만 '0원'. provider≠claude_cli_batch 면 구독 단정 안 함.
+- **MacBook candidate plist 백업·제거**: `~/petcam-launchd-backups/20260716T092615/` 로 비파괴 이동, LaunchAgents 에서 absent. 두 호스트 candidate loaded 정확히 1(Mac mini).
+- 커밋: nightly `0c85052`, lab `ba1aaf3`. Mac mini pull 완료(0c85052/ba1aaf3), 모듈 compile OK.

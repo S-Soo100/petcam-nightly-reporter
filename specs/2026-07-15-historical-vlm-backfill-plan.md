@@ -1,5 +1,7 @@
 # Historical VLM Backfill 240 Implementation Plan
 
+> **SUPERSEDED (2026-07-16)** — 고정 8박 240개는 rolling backfill 로 대체됨: `specs/2026-07-16-rolling-vlm-backfill-design.md`. 이 문서는 history 로 보존.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 > **2026-07-16 단일 호스트 운영 하드닝 반영** (`docs/superpowers/plans/2026-07-16-vlm-single-host-operations-hardening.md`):

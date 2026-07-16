@@ -51,3 +51,20 @@ Task 11 Gate A(commit/push) → B(migration apply) → C(Mac mini preflight) →
 - **API 비용 정직성**(deployed): cost>0 이면 실제 USD+경고, 0일 때만 '0원'. provider≠claude_cli_batch 면 구독 단정 안 함.
 - **MacBook candidate plist 백업·제거**: `~/petcam-launchd-backups/20260716T092615/` 로 비파괴 이동, LaunchAgents 에서 absent. 두 호스트 candidate loaded 정확히 1(Mac mini).
 - 커밋: nightly `0c85052`, lab `ba1aaf3`. Mac mini pull 완료(0c85052/ba1aaf3), 모듈 compile OK.
+
+## 2026-07-16 (3) — Rolling backfill 전환 (코드·migration deployed, Mac mini 반영 PENDING)
+
+정본: `specs/2026-07-16-rolling-vlm-backfill-design.md` + `docs/superpowers/plans/2026-07-16-rolling-vlm-backfill.md`.
+고정 8박(2026-07-15-historical-vlm-backfill-plan.md) → **rolling superseded**(history 보존).
+
+- **커밋/push 완료**: nightly `81f3b57`, lab `e95187f`(ledger migration). main==origin.
+- **ledger migration production 적용 완료·검증**: `vlm_backfill_ledger` + `fn_claim_backfill_source_date`(원자 claim first=true/dup=false 실측)/`fn_upsert_backfill_ledger`. advisor 신규 critical 0(INFO rls_no_policy=service_role infra). 합성 row 정리 후 ledger 0행.
+- **production 데이터 무변경**: total 139(backfill 120·regular 19) pre==post, ledger 0행.
+- ⚠️ **Mac mini rolling 반영 PENDING**: 배포 시점 Mac mini(home-mac/100.78.155.5) SSH **연결 불가**(3회 timeout, Tailscale 미도달 — 호스트 sleep/오프라인 추정). Mac mini 는 여전히 **구 고정 backfill 코드(e5a0823) + 07~19 :00 plist** 로 정상 동작 중(07-10 진행). ledger·rolling 코드 미사용(dormant). 부분 배포/손상 없음.
+
+### Mac mini 반영 재개 절차(호스트 도달 시, 정규 VLM ±30분 밖)
+1. `ssh home-mac` 도달 확인 → `cd ~/petcam-nightly-reporter && git pull --ff-only`(→81f3b57), `cd ~/petcam-lab && git pull --ff-only`(→e95187f).
+2. compile 확인 → 기존 backfill 미실행 확인 → `launchctl bootout gui/$(id -u)/com.petcam.vlm-historical-backfill`.
+3. `bash install-launchd-vlm-backfill.sh`(24× :35) → plist 24 entry·:35·guard 확인.
+4. 첫 허용 cycle(:35, 정규 ±30분 밖) 관찰 → Slack `📦 과거 영상 VLM 분석`(대기 날짜 포함)·DB·로그·temp 0 대조.
+- rollback: 재설치 실패 시 구 07~19 :00 installer 자동 복구 금지, 증거 보존·보고.

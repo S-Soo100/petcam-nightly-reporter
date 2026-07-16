@@ -149,6 +149,18 @@ class FakeSB:
             return _RpcResult(hit["id"])
         if name == "fn_reserve_clip_vlm_job":
             job=next(x for x in self.store.get("clip_vlm_jobs",[]) if x["id"]==args["p_job_id"]);job["status"]="submitted";job["attempt_count"]+=1;return _RpcResult(True)
+        if name == "fn_claim_vlm_slack_notification":
+            store=self.store.setdefault("vlm_slack_notifications",[])
+            key=(args["p_selector"],args["p_window_start"],args["p_window_end"],args["p_host"])
+            if any((r["selector_version"],r["window_start"],r["window_end"],r["producer_host"])==key for r in store):
+                return _RpcResult(False)  # 이미 claim 됨(순차 재실행/동시 실행) → False
+            store.append({"selector_version":key[0],"window_start":key[1],"window_end":key[2],"producer_host":key[3],"run_id":args.get("p_run_id")})
+            return _RpcResult(True)
+        if name == "fn_release_vlm_slack_notification":
+            key=(args["p_selector"],args["p_window_start"],args["p_window_end"],args["p_host"])
+            store=self.store.get("vlm_slack_notifications",[])
+            self.store["vlm_slack_notifications"]=[r for r in store if (r["selector_version"],r["window_start"],r["window_end"],r["producer_host"])!=key]
+            return _RpcResult(None)
         raise KeyError(name)
 
 class _RpcResult:

@@ -21,8 +21,9 @@ from reporter.vlm_episode import reduce_episodes
 from reporter.vlm_frames import FrameExtractionError,extract_six
 from reporter.vlm_host_guard import HostOwnershipError,require_expected_host
 from reporter.vlm_selector import select_candidates
-from reporter.vlm_store import (create_run_and_jobs,load_due_jobs_for_selector_window,
-                                load_recovery_jobs_for_selector,mark_submitted,update_job)
+from reporter.vlm_store import (claim_vlm_slack_notification,create_run_and_jobs,
+                                load_due_jobs_for_selector_window,load_recovery_jobs_for_selector,
+                                mark_submitted,release_vlm_slack_notification,update_job)
 
 LOCK="/tmp/petcam-vlm-candidate-worker.lock"
 
@@ -215,7 +216,8 @@ def run(*,sb=None,now=None,enabled=None,client=None,process_fn=None,
         load_current_fn=load_due_jobs_for_selector_window,
         load_recovery_fn=load_recovery_jobs_for_selector,
         hostname_fn=socket.gethostname,expected_host=None,
-        acquire_lock_fn=acquire_vlm_lock,release_lock_fn=release_vlm_lock,send_fn=None):
+        acquire_lock_fn=acquire_vlm_lock,release_lock_fn=release_vlm_lock,send_fn=None,
+        claim_fn=claim_vlm_slack_notification,release_notification_fn=release_vlm_slack_notification):
     enabled=config.VLM_ROUTER_ENABLED if enabled is None else enabled
     if not enabled:print("[vlm-router] disabled — skip");return 0
     if send_fn is None:send_fn=slack.post_slack
@@ -256,13 +258,19 @@ def run(*,sb=None,now=None,enabled=None,client=None,process_fn=None,
         if not breaker_triggered(current_stats) and not current_remaining:
             recovery_due=load_recovery_fn(sb,config.VLM_SELECTOR_VERSION,before=start,limit=config.VLM_MAX_PER_CAMERA_WINDOW)
             recovery_stats=process_fn(sb,recovery_due)
-        # DB terminal update 완료 후 VLM 전용 Slack 요약 1회(§9). Slack 실패는 catch 되며
-        # VLM job 상태·Claude 를 재호출하지 않는다.
+        # DB terminal update 완료 후 VLM 전용 Slack 요약 1회(§9). durable claim 으로 동일
+        # scheduled window(selector+window+host)를 최대 1회만 전송(§Item2). Slack 실패는 catch
+        # 되며 VLM job 상태·Claude 를 재호출하지 않고, claim 을 해제해 재전송 가능하게 한다.
         summary=aggregate_vlm_run(sb,config.VLM_SELECTOR_VERSION,start,end,now=datetime.now(timezone.utc),
                                   host=host,run_id=run_id,next_run=next_run,
                                   recovery_count=_processed_count(recovery_stats),
                                   provider=config.VLM_PROVIDER,model_expected=config.VLM_MODEL)
-        if not send_vlm_run_summary(summary,send_fn=send_fn):print(f"[vlm-router] slack=FAIL run={run_id}")
+        if claim_fn(sb,config.VLM_SELECTOR_VERSION,start,end,host,run_id):
+            if not send_vlm_run_summary(summary,send_fn=send_fn):
+                release_notification_fn(sb,config.VLM_SELECTOR_VERSION,start,end,host)
+                print(f"[vlm-router] slack=FAIL run={run_id}")
+        else:
+            print(f"[vlm-router] slack dedup skip run={run_id}")
         print(f"[vlm-router] provider={config.VLM_PROVIDER} window={start.isoformat()}..{end.isoformat()} clips={len(clips)} current={current_stats} recovery={recovery_stats}");return 0
     finally:release_lock_fn(lock)
 if __name__=="__main__":raise SystemExit(run())

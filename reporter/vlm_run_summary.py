@@ -151,7 +151,12 @@ def format_vlm_run_summary(s: VlmRunSummary) -> str:
     ordered = sorted(s.action_dist.items(), key=lambda kv: (_ACTION_ALLOWLIST.index(kv[0]) if kv[0] in _ACTION_ALLOWLIST else len(_ACTION_ALLOWLIST), kv[0]))
     behavior = "· 행동: " + (" · ".join(f"{_ACTION_LABEL.get(a, a)} {n}" for a, n in ordered) or "없음")
     note = f" · ⚠️모델불일치 {s.model_mismatch_count}" if s.model_mismatch_count else ""
-    model = f"· 모델: {_model_label(s.model_actual)} 구독 · 직접 API 비용 0원{note}"
+    # 비용 정직성: 실제 값이 0일 때만 '0원'. >0 이면 실제 USD + 경고(숨기지 않음).
+    # provider 가 claude_cli_batch 가 아니면 구독이라 단정하지 않는다.
+    mode = "구독" if s.provider == "claude_cli_batch" else f"provider={s.provider}"
+    cost = s.direct_api_cost_usd
+    cost_str = f"⚠️ 직접 API 비용 ${cost:g}" if cost and cost > 0 else "직접 API 비용 0원"
+    model = f"· 모델: {_model_label(s.model_actual)} {mode} · {cost_str}{note}"
     queue_state = f"⚠️지연(최고 {s.oldest_due_age_min}분)" if s.oldest_due_age_min > 30 else "정상"
     queue = f"· 큐: {queue_state} · 다음 분석 {nxt:%H:%M}"
     return "\n".join([head, hostline, cand, slot, result, behavior, model, queue])

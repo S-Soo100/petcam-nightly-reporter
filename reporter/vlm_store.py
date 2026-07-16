@@ -7,6 +7,23 @@ def update_job(sb,job_id,values):
     rows=sb.table("clip_vlm_jobs").update(values).eq("id",job_id).execute().data
     if len(rows)!=1:raise RuntimeError("job update failed")
     return rows[0]
+def claim_vlm_slack_notification(sb,selector_version,start,end,host,run_id):
+    """원자 claim: 같은 (selector,window,host) 로 최초 1회만 True. 이후·동시 실행은 False.
+
+    durable(DB) idempotency — 프로세스 메모리 아님. unique constraint + INSERT ON CONFLICT
+    DO NOTHING 로 동시 실행도 한 번만 통과한다(§Item2)."""
+    return bool(sb.rpc("fn_claim_vlm_slack_notification",{
+        "p_selector":selector_version,"p_window_start":start.isoformat(),
+        "p_window_end":end.isoformat(),"p_host":host,"p_run_id":run_id,
+    }).execute().data)
+
+def release_vlm_slack_notification(sb,selector_version,start,end,host):
+    """Slack 전송 실패 시 claim 을 해제해 다음 실행이 재전송할 수 있게 한다(재전송 정책)."""
+    sb.rpc("fn_release_vlm_slack_notification",{
+        "p_selector":selector_version,"p_window_start":start.isoformat(),
+        "p_window_end":end.isoformat(),"p_host":host,
+    }).execute()
+
 def load_due_jobs(sb,limit=64):
     rows=[]
     for status in ("queued","failed_retryable"):

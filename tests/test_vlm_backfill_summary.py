@@ -36,52 +36,60 @@ def test_total_target_is_240():
     assert TOTAL_TARGET == 240 and NIGHT_TARGET == 30
 
 
-def test_aggregate_counts_only_backfill_selector():
-    rows = ([_bf_job("2026-07-07", "succeeded") for _ in range(30)]
-            + [_bf_job("2026-07-08", "succeeded") for _ in range(28)]
-            + [_reg_job("succeeded") for _ in range(15)])  # 정규 selector 는 제외돼야 함
+def test_aggregate_semantics_processed_vs_remaining_excludes_terminal():
+    # 90 created: 78 succeeded + 12 terminal, open 0 → 처리 90, 남은 처리 240-90=150
+    rows = ([_bf_job("2026-07-07", "succeeded") for _ in range(78)]
+            + [_bf_job("2026-07-08", "failed_terminal") for _ in range(12)]
+            + [_reg_job("succeeded") for _ in range(15)])  # 정규 selector 제외
     sb = FakeSB({"clip_vlm_jobs": rows})
     summary = aggregate_backfill_progress(
-        sb, source_date="2026-07-08", host="baeg-endeuui-Macmini.local",
-        now=datetime(2026, 7, 16, 10, tzinfo=timezone.utc),
-        this_run_stats=_stats(succeeded=28, retryable=2), processed_target=30)
-    assert summary.cumulative_succeeded == 58  # 정규 15 미포함
-    assert summary.remaining == TOTAL_TARGET - 58
-    assert summary.this_run == {"target": 30, "succeeded": 28, "retryable": 2, "failed": 0, "held": 0}
-
-
-def test_format_progress_message_shape():
-    sb = FakeSB({"clip_vlm_jobs": [_bf_job("2026-07-09", "succeeded") for _ in range(105)]})
-    summary = aggregate_backfill_progress(
         sb, source_date="2026-07-09", host="baeg-endeuui-Macmini.local",
+        now=datetime(2026, 7, 16, 10, tzinfo=timezone.utc),
+        this_run_stats=_stats(succeeded=4, retryable=2), processed_target=30)
+    assert summary.created == 90 and summary.succeeded == 78 and summary.terminal == 12
+    assert summary.processed == 90                       # succeeded + terminal
+    assert summary.remaining_processing == 150           # terminal 은 남은 처리에 미포함
+    assert summary.not_created == 150                     # 240 - 90 created
+    assert summary.in_progress == 0
+    assert summary.this_run == {"target": 30, "succeeded": 4, "retryable": 2, "failed": 0, "held": 0}
+
+
+def test_format_progress_message_shape_with_processed_semantics():
+    rows = ([_bf_job("2026-07-10", "succeeded") for _ in range(100)]
+            + [_bf_job("2026-07-10", "failed_terminal") for _ in range(12)]
+            + [_bf_job("2026-07-10", "queued") for _ in range(8)])  # created 120, processed 112, open 8
+    sb = FakeSB({"clip_vlm_jobs": rows})
+    summary = aggregate_backfill_progress(
+        sb, source_date="2026-07-10", host="baeg-endeuui-Macmini.local",
         now=datetime(2026, 7, 16, 4, tzinfo=timezone.utc),  # KST 13:00 daytime
         this_run_stats=_stats(succeeded=28, retryable=2), processed_target=30)
     msg = format_backfill_progress(summary)
     assert "📦 과거 영상 VLM 분석" in msg
     assert "· 실행 장비: Mac mini" in msg
-    assert "· 처리 날짜: 07/09" in msg
+    assert "· 처리 날짜: 07/10" in msg
     assert "· 이번 실행: 대상 30 · 성공 28 · 재시도 2 · 실패 0" in msg
-    assert "· 누적: 완료 105 / 전체 240" in msg
-    assert "· 남은 영상: 135" in msg
+    assert "· 누적 처리: 112/240 (성공 100 · 영구실패 12)" in msg
+    assert "· 진행 중: 8 · 미생성: 120" in msg
+    assert "· 남은 처리: 128" in msg  # 240 - 112
     assert "예상 완료:" in msg and "다음 실행:" in msg
-    # raw 노출 없음
     for secret in ("/Users/", "@", "reasoning"):
         assert secret not in msg
 
 
-def test_completion_message_once_when_all_dates_done():
-    rows = []
-    for d in source_nights():
-        rows += [_bf_job(d.isoformat(), "succeeded") for _ in range(30)]
+def test_completion_message_when_processed_reaches_target():
+    # 240 created: 228 succeeded + 12 terminal, open 0 → 처리 240/240, 남은 처리 0
+    rows = ([_bf_job(source_nights()[0].isoformat(), "succeeded") for _ in range(228)]
+            + [_bf_job(source_nights()[0].isoformat(), "failed_terminal") for _ in range(12)])
     sb = FakeSB({"clip_vlm_jobs": rows})
     summary = aggregate_backfill_progress(
         sb, source_date=source_nights()[-1], host="Mac mini",
         now=datetime(2026, 7, 16, 10, tzinfo=timezone.utc),
         this_run_stats=_stats(succeeded=30), processed_target=30)
-    assert summary.complete is True and summary.remaining == 0
+    assert summary.complete is True and summary.remaining_processing == 0
     msg = format_backfill_progress(summary)
     assert "전체 완료" in msg
-    assert "남은 영상: 0" in msg
+    assert "· 처리: 240/240 (성공 228 · 영구실패 12)" in msg
+    assert "남은 처리: 0" in msg
 
 
 def test_next_backfill_run_daytime_and_night():

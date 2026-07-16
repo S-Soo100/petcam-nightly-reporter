@@ -5,8 +5,9 @@ from types import SimpleNamespace
 import cv2,numpy as np,pytest
 from tests._fakes import FakeSB
 from reporter.vlm_frames import normalize_jpeg,sample_times
-from reporter.vlm_store import (create_run_and_jobs,load_due_jobs_for_selector_window,
-                                load_recovery_jobs_for_selector,mark_submitted)
+from reporter.vlm_store import (claim_vlm_slack_notification,create_run_and_jobs,
+                                load_due_jobs_for_selector_window,load_recovery_jobs_for_selector,
+                                mark_submitted,release_vlm_slack_notification)
 from reporter.vlm_backfill_selector import BACKFILL_SELECTOR_VERSION
 from reporter.anthropic_analyzer import analyze_clip
 from reporter.vlm_models import CandidateClip
@@ -55,6 +56,25 @@ def test_queue_loaders_never_return_backfill_terminal_or_held():
     ids|={j["id"] for j in load_recovery_jobs_for_selector(sb,_REG,before=_START)}
     assert ids=={"cur-r","cur-q","old-r"}
     assert not (ids & {"bf-cur-q","bf-old-r","done","term","held"})
+
+
+def test_slack_notification_claim_is_atomic_and_durable():
+    sb = FakeSB()
+    # 최초 claim → True, 같은 (selector,window,host) 재/동시 claim → False (원자 dedup)
+    assert claim_vlm_slack_notification(sb, _REG, _START, _END, "mac-mini", "r1") is True
+    assert claim_vlm_slack_notification(sb, _REG, _START, _END, "mac-mini", "r1") is False
+    # 다른 window → 새 claim True
+    other = datetime(2026, 7, 16, 2, tzinfo=timezone.utc)
+    assert claim_vlm_slack_notification(sb, _REG, _END, other, "mac-mini", "r2") is True
+    # 다른 host → 새 claim True (host 도 키의 일부)
+    assert claim_vlm_slack_notification(sb, _REG, _START, _END, "other-host", "r3") is True
+
+
+def test_slack_notification_release_allows_retry():
+    sb = FakeSB()
+    assert claim_vlm_slack_notification(sb, _REG, _START, _END, "mac-mini", "r1") is True
+    release_vlm_slack_notification(sb, _REG, _START, _END, "mac-mini")  # 전송 실패 → 해제
+    assert claim_vlm_slack_notification(sb, _REG, _START, _END, "mac-mini", "r1") is True  # 재전송 가능
 
 
 def test_queue_loaders_respect_limit():

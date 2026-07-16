@@ -61,6 +61,23 @@ def test_format_queued_reduces_analyzed_and_shows_wait():
     assert "대기 2" in msg
 
 
+def test_format_cost_zero_shows_zero_and_subscription():
+    msg = format_vlm_run_summary(_summary(direct_api_cost_usd=0.0, provider="claude_cli_batch"))
+    assert "· 모델: Claude Sonnet 5 구독 · 직접 API 비용 0원" in msg
+
+
+def test_format_nonzero_cost_is_shown_with_warning_not_hidden():
+    msg = format_vlm_run_summary(_summary(direct_api_cost_usd=0.0123))
+    assert "0원" not in msg
+    assert "⚠️ 직접 API 비용 $0.0123" in msg
+
+
+def test_format_non_cli_provider_not_claimed_as_subscription():
+    msg = format_vlm_run_summary(_summary(provider="direct_api", direct_api_cost_usd=0.0))
+    assert "구독" not in msg
+    assert "provider=direct_api" in msg
+
+
 def test_format_model_mismatch_warning():
     msg = format_vlm_run_summary(_summary(
         status_counts={"succeeded": 0, "failed_retryable": 0, "failed_terminal": 0, "held_model_mismatch": 4, "queued": 0},

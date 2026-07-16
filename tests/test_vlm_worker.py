@@ -95,6 +95,25 @@ def test_run_slack_failure_does_not_recall_process_or_break():
     assert calls["process"] == [["cur1"]]  # Slack 실패 후 process/recovery 재호출 없음
 
 
+def test_run_dedups_slack_across_same_window_reruns():
+    sb = FakeSB()
+    _, c1 = _run_with_seams([{"id": "cur1"}], [{"id": "cur1"}], [], sb=sb)
+    _, c2 = _run_with_seams([{"id": "cur1"}], [{"id": "cur1"}], [], sb=sb)
+    assert len(c1["sent"]) == 1  # 최초 window → 1회 전송
+    assert len(c2["sent"]) == 0  # 같은 scheduled window 재실행 → durable dedup
+
+
+def test_run_slack_failure_releases_claim_so_next_run_resends():
+    sb = FakeSB()
+
+    def failing_send(_text):
+        raise RuntimeError("slack down")
+
+    _, c1 = _run_with_seams([{"id": "cur1"}], [{"id": "cur1"}], [], sb=sb, send_fn=failing_send)
+    _, c2 = _run_with_seams([{"id": "cur1"}], [{"id": "cur1"}], [], sb=sb)  # 재전송
+    assert len(c2["sent"]) == 1  # 전송 실패로 claim 해제 → 다음 실행이 재전송
+
+
 def test_disabled_worker_does_not_touch_db():
     sb=FakeSB();assert run(sb=sb,now=datetime(2026,7,15,22,tzinfo=ZoneInfo("Asia/Seoul")),enabled=False)==0
     assert sb.store=={}

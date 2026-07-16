@@ -68,3 +68,12 @@ Task 11 Gate A(commit/push) → B(migration apply) → C(Mac mini preflight) →
 3. `bash install-launchd-vlm-backfill.sh`(24× :35) → plist 24 entry·:35·guard 확인.
 4. 첫 허용 cycle(:35, 정규 ±30분 밖) 관찰 → Slack `📦 과거 영상 VLM 분석`(대기 날짜 포함)·DB·로그·temp 0 대조.
 - rollback: 재설치 실패 시 구 07~19 :00 installer 자동 복구 금지, 증거 보존·보고.
+
+## 2026-07-16 (4) — Rolling backfill 배포차단 H1~H5 보완 + Mac mini 반영·첫 cycle 검증 완료
+
+- 커밋: nightly `45992ed`(H1~H5), lab `df7811c`(fn_release_backfill_claim). main==origin.
+- migration: `2026-07-16_vlm_backfill_ledger` + `2026-07-16_vlm_backfill_claim_release` **production 적용·검증**(claim first/dup, release jobs→blocked/no-jobs→released, advisor 신규 critical 0).
+- **Mac mini rolling 배포 완료**: 구 backfill bootout → rolling installer(VLM_EXPECTED_HOST=`baeg-endeuui-Macmini.local`) → plist lint OK · 24× :35 · legacy trigger 0 · host/provider/model/REGISTER=0 명시.
+- **첫 실사이클(kickstart 10:39~10:49) VERIFIED**: `source=2026-07-11 selected=30`(첫 미생성 밤 자동 발견) · 성공 19 · 재시도 11 · non-exact model 0 · ledger processing · **regular 19 불변(crossover 0)** · dup clip 0 · created-today 30(<600) · Slack 전송 성공(slack=FAIL 없음) · temp mp4/frame 0 · exit 0.
+- H1 claim(07-11 processing) · H2 host guard(plist env) · H3 pagination · H4 deadline(process 전달) · H5 정합성 전부 런타임 반영.
+- 다음 :35 cycle 이 07-11 잔여 11 retryable resume → 완료 후 07-12 new 진행(rolling 자동).

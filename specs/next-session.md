@@ -87,3 +87,13 @@ Task 11 Gate A(commit/push) → B(migration apply) → C(Mac mini preflight) →
 - **Claude canary는 Mac mini 전용**: `scripts/evaluate_vlm_basking_canary.py`(host guard→shared lock→media 1:1→auth→4/4/3, DB/Slack 미import). MacBook에서 Claude 미호출. **아직 production main 미반영** — Mac mini 격리 worktree canary 수용 기준 통과 시에만 fast-forward.
 - **DB migration 없음, 기존 150건 재분류 없음, GT/behavior_labels/app activity/Gate 불변.** 새 코드 배포 후 새로 성공하는 job부터 basking 가능.
 - 커밋: Task1 `51faef3` · Task2 `bf51bb5` · Task3 `68e6315`.
+
+## 2026-07-16 (6) — 휴식 canary 결과: REJECTED (main/production 미반영)
+
+Mac mini 격리 worktree canary(`db37c279`, host guard+shared lock 통과, infra_failed 0, 4/4/3) 결과 **accepted=false → 수용 기준 미달**. 설계 §7.2/§9에 따라 **main merge·Mac mini production pull 중단**. production main `b9dc9eb` 불변, 두 LaunchAgent 불변, DB 무변경(v4.1 job 0·basking 0·regular 19·canary clip 여전히 v4.0).
+
+- 수용 기준: unseen=3·moving=3·basking≥4·basking→unseen=0. 실측: **unseen 3✓ / moving 1✗ / basking 2✗ / basking→unseen 2✗**.
+- v4.1 개선점: basking 0→2 회복(ad1772c6·1d34eb48), a3774a4f unseen 회복.
+- v4.1 부작용: ca27e1f3 moving→basking 퇴행(moving 3→1), 941aadb9·ab8cd4b0 basking→unseen(critical error 1→2).
+- 원인 가설: v4.1 basking 경계가 "몸 위치 고정" 쪽으로 과회전 → 실제 이동(ca27e1f3)을 basking으로, 가림 큰 휴식(941aadb9/ab8cd4b0)을 여전히 unseen으로. 프롬프트 재조정 필요(basking↔unseen 가림 처리 + basking↔moving 미세 이동 경계). 결과 로컬 보존: `petcam-lab/storage/retry-review-20260711/vlm-basking-v4.1-canary.json`, baseline `pre-v4.1-retry-baseline.json`.
+- feature branch `feat/vlm-basking-classification`는 유지(코드·계약·canary 하네스는 GREEN). 다음: 프롬프트 재조정 후 동일 canary 재실행.

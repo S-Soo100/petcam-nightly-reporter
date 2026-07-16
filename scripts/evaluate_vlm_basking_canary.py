@@ -17,6 +17,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))  # repo root on path (스크립트 직접 실행)
+
 from reporter.claude_cli_analyzer import analyze_batch_with_retry, check_cli_auth
 from reporter.vlm_frames import extract_six
 from reporter.vlm_host_guard import require_expected_host

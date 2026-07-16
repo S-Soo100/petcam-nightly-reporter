@@ -18,3 +18,7 @@
 - **진행률은 worker 의 완료 계약과 일치**시킨다. backfill 은 `succeeded+failed_terminal`을 '처리'로, `240−처리`를 '남은 처리'로 표시한다. failed_terminal 은 worker 가 재처리 안 하므로 '남은'에 넣으면 모순(완료율이 영원히 안 참). ETA 도 성공이 아니라 남은 처리량 기준.
 - **scheduled 알림은 durable idempotency**로 보낸다. 실행시각 run_id + 프로세스 메모리로는 수동 재실행·동시 실행 중복을 못 막는다. (selector+window+host) unique + INSERT ON CONFLICT 원자 claim, 전송 실패 시 claim 해제로 재전송.
 - **비용은 정직하게**. 계산값을 무시하고 '0원' 하드코딩 금지 — >0 이면 실제값+경고, provider 로 구독 여부 단정 금지.
+
+## 2026-07-16 (4) — VLM 분류 taxonomy gap
+
+- VLM enum에 GT 정본 행동이 없으면 모델 오류율로 해석하지 않는다. taxonomy gap을 먼저 닫고, 구현 host와 Claude runtime host를 분리한 blind canary로 검증한다.

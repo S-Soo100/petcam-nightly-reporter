@@ -77,3 +77,13 @@ Task 11 Gate A(commit/push) → B(migration apply) → C(Mac mini preflight) →
 - **첫 실사이클(kickstart 10:39~10:49) VERIFIED**: `source=2026-07-11 selected=30`(첫 미생성 밤 자동 발견) · 성공 19 · 재시도 11 · non-exact model 0 · ledger processing · **regular 19 불변(crossover 0)** · dup clip 0 · created-today 30(<600) · Slack 전송 성공(slack=FAIL 없음) · temp mp4/frame 0 · exit 0.
 - H1 claim(07-11 processing) · H2 host guard(plist env) · H3 pagination · H4 deadline(process 전달) · H5 정합성 전부 런타임 반영.
 - 다음 :35 cycle 이 07-11 잔여 11 retryable resume → 완료 후 07-12 new 진행(rolling 자동).
+
+## 2026-07-16 (5) — VLM 휴식(basking) 분류 복구 (feature branch, canary 전 / production 미반영)
+
+정본: `specs/2026-07-16-vlm-basking-classification-design.md` + `docs/superpowers/plans/2026-07-16-vlm-basking-classification.md`. 브랜치 `feat/vlm-basking-classification`.
+
+- **v4.1 계약 구현·local tests GREEN**: 새 `resting` enum 없이 기존 저장 enum `basking` 복구. prompt `system.v4.1.md` / `VLM_PROMPT_VERSION=v4.1-direct-images`, CLI·직접API schema 8-class parity(직접 API 비활성 유지). basking=자동 하이라이트 제외, Slack `휴식` 표시(기타 미붕괴). full pytest 282 passed.
+- **11건 blind 분포**: unseen 3 / moving 3 / basking 5(그중 제품 제외 2건 `ab273d21`,`ab8cd4b0` — 제품 제외는 행동 라벨과 분리, 실험 보고서에만). manifest `experiments/vlm-basking-20260716/human-blind-manifest.json`(short ID·기대 행동만, UUID/영상/reasoning 미커밋).
+- **Claude canary는 Mac mini 전용**: `scripts/evaluate_vlm_basking_canary.py`(host guard→shared lock→media 1:1→auth→4/4/3, DB/Slack 미import). MacBook에서 Claude 미호출. **아직 production main 미반영** — Mac mini 격리 worktree canary 수용 기준 통과 시에만 fast-forward.
+- **DB migration 없음, 기존 150건 재분류 없음, GT/behavior_labels/app activity/Gate 불변.** 새 코드 배포 후 새로 성공하는 job부터 basking 가능.
+- 커밋: Task1 `51faef3` · Task2 `bf51bb5` · Task3 `68e6315`.

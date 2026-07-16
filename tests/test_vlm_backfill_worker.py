@@ -4,11 +4,12 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from reporter.vlm_backfill_gate import GateEnrichment
-from reporter.vlm_backfill_selector import BACKFILL_SELECTOR_VERSION, bucket_plans, source_nights
+from reporter.vlm_backfill_selector import BACKFILL_SELECTOR_VERSION, EPOCH_START, bucket_plans, source_nights
 from reporter.vlm_backfill_worker import (
     InsufficientCandidates,
     backfill_allowed_now,
     choose_target_camera,
+    next_rolling_source_date,
     next_source_date,
     prepare_wave,
     run,
@@ -65,6 +66,7 @@ def _jobs_for_day(day, *, count: int, status: str = "succeeded", completed_at: d
             "window_end": plan.end.isoformat(),
             "slot": plan.required_slots[index % len(plan.required_slots)].value,
             "status": status,
+            "rank_features": {"source_date": day.isoformat(), "bucket_index": plan.bucket_index},
             "attempt_count": 1,
             "error_code": None,
             "queued_at": datetime(2026, 7, 15, 0, tzinfo=timezone.utc).isoformat(),
@@ -118,15 +120,29 @@ def test_target_camera_is_largest_without_hardcoded_uuid():
     assert choose_target_camera(FakeSB({"motion_clips": rows}), source_nights()) == "camera-a"
 
 
-def test_prepare_wave_validates_30_before_any_rpc_write():
+def test_prepare_wave_zero_candidates_writes_nothing():
+    # rolling: 0 후보면 raise 대신 빈 wave 반환, 아무 것도 생성하지 않음(worker 가 no_candidates 처리)
     sb = FakeSB()
-    with pytest.raises(InsufficientCandidates):
-        prepare_wave(
-            sb, source_nights()[0], "camera-a", load_fn=_load_wave, enrich_fn=_enrich,
-            select_fn=lambda *_args: [], history_fn=lambda *_args: {},
-        )
+    wave = prepare_wave(
+        sb, EPOCH_START, "camera-a", load_fn=_load_wave, enrich_fn=_enrich,
+        select_fn=lambda *_args: [], history_fn=lambda *_args: {},
+    )
+    assert len(wave.selected) == 0
     assert sb.store.get("clip_vlm_selector_runs", []) == []
     assert sb.store.get("clip_vlm_jobs", []) == []
+
+
+def test_prepare_wave_insufficient_creates_only_available_and_dedups():
+    # 1~29 후보: 존재분만 생성. exclude_clip_ids 로 cross-selector 중복 제외.
+    sb = FakeSB()
+    excluded = {"20-0"}  # bucket0(20시) 첫 clip 은 이미 다른 job 존재 → 제외
+    wave = prepare_wave(
+        sb, EPOCH_START, "camera-a", load_fn=_load_wave, enrich_fn=_enrich, select_fn=_select,
+        history_fn=lambda *_a: {}, exclude_clip_ids=excluded, max_new=5)
+    assert 0 < len(wave.selected) <= 5           # max_new clamp
+    ids = [item.clip.id for item in wave.selected]
+    assert len(ids) == len(set(ids))             # wave 내 unique
+    assert "20-0" not in ids                     # 제외 clip 미포함
 
 
 def test_prepare_wave_creates_8_runs_and_30_jobs_idempotently():
@@ -230,14 +246,58 @@ def test_existing_30_job_wave_resumes_without_gate_or_reselection():
     assert len(sent) == 1 and "과거 영상 VLM 분석" in sent[0]  # 실제 처리 cycle → 진행률 1회
 
 
-def test_partial_persisted_wave_fails_closed_instead_of_adding_jobs():
+def test_rolling_resumes_open_night_without_reselection_or_recreate():
+    # 부족(29) night 라도 open 이면 resume 처리. 재-wave/재생성 없음.
     jobs = _jobs_for_day(source_nights()[0], count=29, status="failed_retryable")
     start = bucket_plans(source_nights()[0])[0].start
     sb = FakeSB({"motion_clips": [_motion_clip("a", "camera-a", start)], "clip_vlm_jobs": jobs})
+    calls = []; sent = []
     assert run(
         sb=sb,
         now=datetime(2026, 7, 15, 11, tzinfo=_KST),
+        process_fn=lambda _sb, due: calls.append(len(due)) or {"succeeded": len(due)},
         acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
-        prepare_fn=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("partial wave must fail closed")),
+        prepare_fn=lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("resume must not reselect")),
+        acquire_activity_lock_fn=lambda: (_ for _ in ()).throw(AssertionError("resume must not run Gate")),
+        send_fn=lambda t: sent.append(t) or True,
     ) == 0
-    assert len(sb.store["clip_vlm_jobs"]) == 29
+    assert calls == [29]                          # 29 due 재개
+    assert len(sb.store["clip_vlm_jobs"]) == 29    # 재생성 없음
+    assert len(sent) == 1
+
+
+def test_rolling_daily_cap_blocks_new_wave_at_600():
+    # 오늘 이미 600개 생성 → 신규 wave 생성 안 함(no-op), Slack 0
+    today_jobs = [{"selector_version": BACKFILL_SELECTOR_VERSION, "status": "succeeded",
+                   "created_at": "2026-07-15T02:00:00+00:00",  # KST 11:00 오늘
+                   "rank_features": {"source_date": "2026-07-07"}} for _ in range(600)]
+    # 07-07 은 전부 succeeded(open 0) → 파생 complete. 신규 대상은 07-08(미생성).
+    start = bucket_plans(EPOCH_START + timedelta(days=1))[0].start  # 07-08 night
+    sb = FakeSB({"clip_vlm_jobs": today_jobs, "motion_clips": [_motion_clip("a", "camera-a", start)]})
+    sent = []
+    assert run(sb=sb, now=datetime(2026, 7, 15, 2, tzinfo=timezone.utc),  # KST 11:00
+               acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
+               prepare_fn=lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("cap must block new wave")),
+               send_fn=lambda t: sent.append(t) or True) == 0
+    assert sent == []
+
+
+def test_rolling_no_candidates_night_closes_via_ledger_no_slack():
+    # 대상 night 에 motion clip 0 → ledger no_candidates, Slack 0
+    sb = FakeSB()  # motion_clips 없음
+    sent = []
+    assert run(sb=sb, now=datetime(2026, 7, 15, 2, tzinfo=timezone.utc),  # KST 11:00
+               acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
+               prepare_fn=lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("no wave for 0 clips")),
+               send_fn=lambda t: sent.append(t) or True) == 0
+    ledger = sb.store.get("vlm_backfill_ledger", [])
+    assert any(r["status"] == "no_candidates" for r in ledger)
+    assert sent == []
+
+
+def test_rolling_schedule_guard_noop_before_lock():
+    def boom(*_a, **_k):
+        raise AssertionError("schedule guard must no-op before lock/DB")
+    # 21:35 KST = 정규 22:00 25분 전 → guard skip
+    assert run(now=datetime(2026, 7, 15, 21, 35, tzinfo=_KST),
+               acquire_vlm_lock_fn=boom, process_fn=boom, prepare_fn=boom, send_fn=boom) == 0

@@ -12,8 +12,27 @@ from reporter.vlm_models import CandidateClip, EpisodeRepresentative, SelectedCa
 from reporter.vlm_selector import ORDER, select_candidates
 
 KST = ZoneInfo("Asia/Seoul")
+# 고정 8박은 historical(superseded). rolling 은 EPOCH_START 부터 종료된 밤을 자동 발견한다.
 SOURCE_DATES = tuple(date(2026, 7, day) for day in range(7, 15))
+EPOCH_START = date(2026, 7, 7)
 BACKFILL_SELECTOR_VERSION = "budget-router-backfill-20260707-14-v1"
+
+
+def latest_closed_source_date(now: datetime) -> date:
+    """완전히 종료된(N+1 06:00 KST <= now) 가장 최근 source night. 진행 중 밤은 제외."""
+    kst = now.astimezone(KST)
+    candidate = kst.date() - timedelta(days=1)
+    while datetime.combine(candidate + timedelta(days=1), time(6), KST) > kst:
+        candidate -= timedelta(days=1)
+    return candidate
+
+
+def rolling_source_nights(start_date: date, now: datetime) -> tuple[date, ...]:
+    """start_date 부터 latest_closed 까지의 종료된 밤(오름차순). 없으면 빈 tuple."""
+    latest = latest_closed_source_date(now)
+    if latest < start_date:
+        return ()
+    return tuple(start_date + timedelta(days=i) for i in range((latest - start_date).days + 1))
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,7 +49,8 @@ def source_nights() -> tuple[date, ...]:
 
 
 def bucket_plans(source_date: date) -> tuple[BucketPlan, ...]:
-    night_index = SOURCE_DATES.index(source_date)
+    # 임의 날짜 지원: EPOCH 기준 안정 index(기존 07-07~14 는 동일 → job window_start 불변).
+    night_index = (source_date - EPOCH_START).days % 8
     night_start = datetime.combine(source_date, time(20), KST)
     plans = []
     for bucket_index in range(8):

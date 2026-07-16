@@ -24,6 +24,26 @@ def release_vlm_slack_notification(sb,selector_version,start,end,host):
         "p_window_end":end.isoformat(),"p_host":host,
     }).execute()
 
+def claim_backfill_source_date(sb,selector_version,source_date,scope):
+    """rolling backfill 날짜 원자 claim(동시 worker 중복 wave 방지). 최초 1회만 True."""
+    return bool(sb.rpc("fn_claim_backfill_source_date",{
+        "p_selector":selector_version,"p_source_date":source_date.isoformat(),"p_scope":scope,
+    }).execute().data)
+
+def upsert_backfill_ledger(sb,selector_version,source_date,scope,status,*,target=0,created=0,processed=0,succeeded=0,terminal=0,last_error=None):
+    sb.rpc("fn_upsert_backfill_ledger",{
+        "p_selector":selector_version,"p_source_date":source_date.isoformat(),"p_scope":scope,
+        "p_status":status,"p_target":target,"p_created":created,"p_processed":processed,
+        "p_succeeded":succeeded,"p_terminal":terminal,"p_last_error":last_error,
+    }).execute()
+
+def load_backfill_ledger(sb,selector_version):
+    return sb.table("vlm_backfill_ledger").select("source_date,scope,status").eq("selector_version",selector_version).execute().data
+
+def load_dedup_clip_ids(sb):
+    """모든 selector 의 clip_vlm_jobs clip_id 집합(cross-selector 중복 분석 방지)."""
+    return {r["clip_id"] for r in sb.table("clip_vlm_jobs").select("clip_id").execute().data if r.get("clip_id")}
+
 def load_due_jobs(sb,limit=64):
     rows=[]
     for status in ("queued","failed_retryable"):

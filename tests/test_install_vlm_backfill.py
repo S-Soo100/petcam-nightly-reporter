@@ -59,8 +59,7 @@ def test_backfill_installer_renders_valid_plist_without_real_bootstrap(tmp_path)
     assert "RunAtLoad" not in payload
     assert "StartInterval" not in payload
     hours = sorted(entry["Hour"] for entry in payload["StartCalendarInterval"])
-    assert hours == list(range(7, 20))  # 07~19시 정각만
-    assert all(entry["Minute"] == 0 for entry in payload["StartCalendarInterval"])
-    assert not (set(hours) & {20, 21, 22, 23, 0, 2, 4})  # 정규 야간 schedule 과 무겹침
+    assert hours == list(range(24))  # rolling: 24시간 매시간
+    assert all(entry["Minute"] == 35 for entry in payload["StartCalendarInterval"])  # :35 (정규 :00 과 분리)
     assert payload["EnvironmentVariables"]["ANTHROPIC_MODEL_EXACT"] == "claude-sonnet-5"
     assert payload["EnvironmentVariables"]["REGISTER_HIGHLIGHTS"] == "0"

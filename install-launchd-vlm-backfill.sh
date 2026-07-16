@@ -28,11 +28,11 @@ if [ ! -f "$CHECKPOINT" ]; then
 fi
 
 LAUNCHD_PATH="$(dirname "$UV_BIN"):$(dirname "$CLAUDE_BIN"):/usr/bin:/bin"
-# §7.2: 상시/주기 트리거 대신 07~19시 정각 calendar 만 — 정규 야간(22/00/02/04)
-# schedule 및 shared Claude lock 과 겹치지 않게 낮에만 backfill 을 실행한다.
+# rolling: 24시간 매시간 :35 calendar. 코드 guard(rolling_backfill_allowed_now)가 정규 VLM
+# (22/00/02/04) ±30분 실행을 fail-closed 로 차단하므로 21:35/23:35/01:35/03:35 는 no-op 된다.
 CAL=""
-for HOUR in 7 8 9 10 11 12 13 14 15 16 17 18 19; do
-  CAL="$CAL<dict><key>Hour</key><integer>$HOUR</integer><key>Minute</key><integer>0</integer></dict>"
+for HOUR in $(seq 0 23); do
+  CAL="$CAL<dict><key>Hour</key><integer>$HOUR</integer><key>Minute</key><integer>35</integer></dict>"
 done
 mkdir -p "$HOME/Library/LaunchAgents"
 cat > "$PLIST" <<PLISTEOF
@@ -67,6 +67,6 @@ launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$PLIST"
 
 echo "installed $LABEL provider=claude_cli_batch model=claude-sonnet-5"
-echo "07:00~19:00 KST hourly 실행(정규 야간 schedule 과 무겹침), 240개 완료 시 자동 no-op"
+echo "24시간 매시간 :35 실행(rolling). 정규 VLM ±30분은 코드 guard 로 no-op. backlog 없으면 Claude 0"
 echo "log: /tmp/vlm-historical-backfill.log"
 echo "stop: launchctl bootout gui/$(id -u)/$LABEL"

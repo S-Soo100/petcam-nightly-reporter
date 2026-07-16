@@ -15,11 +15,20 @@ from reporter.activity_worker import acquire_activity_lock, release_activity_loc
 from reporter.vlm_backfill_gate import GateEnrichment, enrich_prepool
 from reporter.vlm_backfill_selector import (
     BACKFILL_SELECTOR_VERSION,
+    EPOCH_START,
     BucketPlan,
     bucket_plans,
     build_prepool,
+    rolling_source_nights,
     select_bucket_candidates,
     source_nights,
+)
+from reporter.vlm_rolling import remaining_daily_budget, rolling_backfill_allowed_now
+from reporter.vlm_store import (
+    claim_backfill_source_date,
+    load_backfill_ledger,
+    load_dedup_clip_ids,
+    upsert_backfill_ledger,
 )
 from reporter.vlm_candidate_indexer import load_recent_history, load_window_candidates, partition_eligibility
 from reporter.vlm_candidate_worker import (
@@ -154,6 +163,8 @@ def prepare_wave(
     camera_id: str,
     *,
     persist: bool=True,
+    exclude_clip_ids=frozenset(),
+    max_new: int|None=None,
     load_fn=load_window_candidates,
     enrich_fn=enrich_prepool,
     select_fn=select_bucket_candidates,
@@ -162,7 +173,9 @@ def prepare_wave(
 ) -> WavePlan:
     plans=bucket_plans(source_date);bucket_inputs={};clips_seen={};all_prepool=[]
     for plan in plans:
-        loaded=[clip for clip in load_fn(sb,plan.start,plan.end,config.VLM_ACTIVITY_POLICY_VERSION,BACKFILL_SELECTOR_VERSION) if clip.camera_id==camera_id]
+        # cross-selector 중복 방지: 이미 어떤 clip_vlm_jobs 든 존재하는 clip 은 후보에서 제외.
+        loaded=[clip for clip in load_fn(sb,plan.start,plan.end,config.VLM_ACTIVITY_POLICY_VERSION,BACKFILL_SELECTOR_VERSION)
+                if clip.camera_id==camera_id and clip.id not in exclude_clip_ids]
         eligible,_reasons=partition_eligibility(loaded);prepool=build_prepool(eligible)
         bucket_inputs[plan.bucket_index]=prepool;clips_seen[plan.bucket_index]=len(loaded);all_prepool+=prepool
     unique={clip.id:clip for clip in all_prepool}
@@ -175,12 +188,24 @@ def prepare_wave(
         selected=select_fn(candidates,plan,history)
         selected=[_attach_snapshot(item,gate.snapshots.get(item.clip.id,{"source":"missing"}),plan) for item in selected]
         buckets.append(BucketSelection(plan,clips_seen[plan.bucket_index],len(bucket_inputs[plan.bucket_index]),tuple(selected)))
-    wave=WavePlan(source_date,camera_id,tuple(buckets),gate.stats)
-    selected=wave.selected
-    if len(selected)!=30 or len({item.clip.id for item in selected})!=30:
-        raise InsufficientCandidates(f"expected 30 unique candidates, got {len(selected)}")
-    if not persist:return wave
+    # 일일 상한 clamp: 이번 wave 가 새로 만들 job 을 max_new 개로 제한(정규 30/cycle·600/day 준수).
+    if max_new is not None:
+        remaining=max(0,max_new);capped=[]
+        for bucket in buckets:
+            take=bucket.selected[:remaining];remaining-=len(take)
+            capped.append(BucketSelection(bucket.plan,bucket.clips_seen,bucket.prepool_count,tuple(take)))
+        buckets=tuple(capped)
+    else:
+        buckets=tuple(buckets)
+    wave=WavePlan(source_date,camera_id,buckets,gate.stats)
+    # rolling: 30 미만도 존재분만 생성(부족 후보), 0 이면 아무 것도 생성 안 함(worker 가 no_candidates 처리).
+    seen_ids=set()
+    for item in wave.selected:
+        if item.clip.id in seen_ids:raise InsufficientCandidates("duplicate clip within wave")
+        seen_ids.add(item.clip.id)
+    if not persist or not wave.selected:return wave
     for bucket in wave.buckets:
+        if not bucket.selected:continue  # 빈 bucket 은 run 생성 안 함(빈 run 오염 방지)
         producer=f"backfill-{source_date.isoformat()}-{bucket.plan.bucket_index}"
         runrow={
             "camera_id":camera_id,"window_start":bucket.plan.start.isoformat(),"window_end":bucket.plan.end.isoformat(),
@@ -195,57 +220,177 @@ def prepare_wave(
     return wave
 
 
-def _report_progress(sb,source_date,now,stats,due,send_fn):
-    """실제 backfill job 을 처리한 cycle 에서만 진행률 Slack 1회(§B). due 가 비면 로그만."""
-    if not due:return
-    summary=aggregate_backfill_progress(sb,source_date=source_date,host=socket.gethostname(),
-                                        now=now,this_run_stats=stats,processed_target=len(due))
-    if not send_backfill_progress(summary,send_fn=send_fn):print(f"[vlm-backfill] slack=FAIL source={source_date}")
+_LEDGER_SKIP = {"no_candidates", "blocked"}
+_OPEN_STATUSES = ("queued", "failed_retryable", "submitted", "processing", "held_model_mismatch")
+
+
+def next_rolling_source_date(closed_nights, ledger_status, job_state):
+    """가장 오래된 미처리 closed night → (date, 'new'|'resume'). ledger no_candidates/blocked skip,
+    jobs open==0 은 완료로 파생(ledger 기록 없이). backlog 없으면 (None, None)."""
+    for d in closed_nights:
+        key = d.isoformat()
+        if ledger_status.get(key) in _LEDGER_SKIP:
+            continue
+        js = job_state.get(key)
+        if not js or js.get("created", 0) == 0:
+            return d, "new"
+        if js.get("open", 0) > 0:
+            return d, "resume"
+    return None, None
+
+
+def _job_state_by_date(sb):
+    rows = (sb.table("clip_vlm_jobs").select("status,rank_features")
+            .eq("selector_version", BACKFILL_SELECTOR_VERSION).execute().data)
+    out = {}
+    for r in rows:
+        d = (r.get("rank_features") or {}).get("source_date")
+        if not d:
+            continue
+        b = out.setdefault(d, {"created": 0, "open": 0, "succeeded": 0, "terminal": 0})
+        b["created"] += 1
+        st = r.get("status")
+        if st == "succeeded":
+            b["succeeded"] += 1
+        elif st == "failed_terminal":
+            b["terminal"] += 1
+        elif st in _OPEN_STATUSES:
+            b["open"] += 1
+    return out
+
+
+def choose_target_camera_for_night(sb, source_date):
+    plans = bucket_plans(source_date)
+    rows = _range_rows(sb, "motion_clips", "id,camera_id,started_at,duration_sec,r2_key", plans[0].start, plans[-1].end)
+    counts = Counter(r["camera_id"] for r in rows if r.get("r2_key") and float(r.get("duration_sec") or 0) > 0)
+    if not counts:
+        return None
+    return min(counts, key=lambda camera_id: (-counts[camera_id], camera_id))
+
+
+def _night_camera(sb, source_date):
+    plans = bucket_plans(source_date)
+    rows = (sb.table("clip_vlm_jobs").select("camera_id").eq("selector_version", BACKFILL_SELECTOR_VERSION)
+            .gte("window_start", plans[0].start.isoformat()).lt("window_start", plans[-1].end.isoformat())
+            .limit(1).execute().data)
+    return rows[0]["camera_id"] if rows else None
+
+
+def _sync_ledger(sb, source_date, scope, status_hint):
+    """처리 후 night job 상태로 ledger upsert. 전부 terminal 이면 completed."""
+    if scope is None:
+        return
+    js = _job_state_by_date(sb).get(source_date.isoformat(), {"created": 0, "open": 0, "succeeded": 0, "terminal": 0})
+    status = "completed" if js["created"] > 0 and js["open"] == 0 else status_hint
+    upsert_backfill_ledger(sb, BACKFILL_SELECTOR_VERSION, source_date, scope, status,
+                           target=js["created"], created=js["created"],
+                           processed=js["succeeded"] + js["terminal"], succeeded=js["succeeded"], terminal=js["terminal"])
+
+
+def _report_progress(sb, source_date, now, stats, due, host, ledger_status, closed_nights, job_state, send_fn):
+    """실제 job 처리 cycle 만 rolling 진행률 Slack 1회. due 비면 로그만."""
+    if not due:
+        return
+    waiting = _waiting_dates(closed_nights, ledger_status, job_state)
+    summary = aggregate_backfill_progress(sb, source_date=source_date, host=host, now=now,
+                                          this_run_stats=stats, processed_target=len(due), waiting_dates=waiting)
+    if not send_backfill_progress(summary, send_fn=send_fn):
+        print(f"[vlm-backfill] slack=FAIL source={source_date}")
+
+
+def _waiting_dates(closed_nights, ledger_status, job_state):
+    """아직 처리되지 않은 closed nights 수(new 또는 open>0)."""
+    n = 0
+    for d in closed_nights:
+        if ledger_status.get(d.isoformat()) in _LEDGER_SKIP:
+            continue
+        js = job_state.get(d.isoformat())
+        if not js or js.get("created", 0) == 0 or js.get("open", 0) > 0:
+            n += 1
+    return n
 
 
 def run(
-    *,sb=None,now=None,dry_run=False,process_fn=process_cli_jobs,prepare_fn=prepare_wave,
-    acquire_vlm_lock_fn=acquire_vlm_lock,release_vlm_lock_fn=release_vlm_lock,
-    acquire_activity_lock_fn=acquire_activity_lock,release_activity_lock_fn=release_activity_lock,
-    send_fn=None,
+    *, sb=None, now=None, dry_run=False, process_fn=process_cli_jobs, prepare_fn=prepare_wave,
+    acquire_vlm_lock_fn=acquire_vlm_lock, release_vlm_lock_fn=release_vlm_lock,
+    acquire_activity_lock_fn=acquire_activity_lock, release_activity_lock_fn=release_activity_lock,
+    send_fn=None, allowed_fn=rolling_backfill_allowed_now, start_date=EPOCH_START,
 ) -> int:
-    now=now or datetime.now(timezone.utc)
-    if send_fn is None:send_fn=slack.post_slack
-    # §7.2 daytime guard: lock/Supabase/R2/Gate/Claude 어느 것도 건드리기 전에 먼저 판정.
-    if not backfill_allowed_now(now):print("[vlm-backfill] outside 07-19 KST — no-op");return 0
-    vlm_lock=acquire_vlm_lock_fn()
-    if vlm_lock is None:return 0
-    try:
-        # §7.2: backfill worker 는 BACKFILL_SELECTOR_VERSION job 만 소유한다. 정규 selector
-        # 를 먼저 drain 하던 구계약을 제거해 정규/backfill queue 교차 소비를 차단한다.
-        sb=sb or create_client(config.SUPABASE_URL,config.SUPABASE_KEY)
-        camera_id=choose_target_camera(sb,source_nights())
-        blocked=blocking_error_for_backfill(sb,camera_id)
-        if blocked:print(f"[vlm-backfill] blocked code={blocked}");return 0
-        source_date=next_source_date(sb,camera_id,now)
-        if source_date is None:print("[vlm-backfill] complete-or-cooldown — no-op");return 0
-        existing=_jobs_in_night(sb,source_date,camera_id)
-        if existing:
-            if len(existing)!=30:
-                print(f"[vlm-backfill] blocked code=incomplete_wave jobs={len(existing)}")
-                return 0
-            plans=bucket_plans(source_date);start=plans[0].start;end=plans[-1].end
-            due=load_due_jobs_for_selector(sb,BACKFILL_SELECTOR_VERSION,start,end)
-            stats=process_fn(sb,due)
-            print(f"[vlm-backfill] resume source={source_date} existing=30 due={len(due)} stats={stats}")
-            _report_progress(sb,source_date,now,stats,due,send_fn)
-            return 0
-        activity_lock=acquire_activity_lock_fn()
-        if activity_lock is None:print("[vlm-backfill] activity worker busy — defer");return 0
-        try:wave=prepare_fn(sb,source_date,camera_id,persist=not dry_run)
-        finally:release_activity_lock_fn(activity_lock)
-        if dry_run:print(json.dumps(wave.to_dict(),ensure_ascii=False));return 0
-        due=load_due_jobs_for_selector(sb,BACKFILL_SELECTOR_VERSION,wave.start,wave.end)
-        stats=process_fn(sb,due)
-        print(f"[vlm-backfill] source={source_date} selected={len(wave.selected)} stats={stats}")
-        _report_progress(sb,source_date,now,stats,due,send_fn)
+    now = now or datetime.now(timezone.utc)
+    if send_fn is None:
+        send_fn = slack.post_slack
+    # schedule guard: 정규 VLM ±30분이면 lock/DB/R2/Gate/Claude 전에 no-op(fail-closed).
+    if not allowed_fn(now):
+        print("[vlm-backfill] near regular VLM window — no-op")
         return 0
-    finally:release_vlm_lock_fn(vlm_lock)
+    vlm_lock = acquire_vlm_lock_fn()
+    if vlm_lock is None:
+        return 0  # 정규 VLM 이 lock 보유 → 조용히 양보
+    try:
+        sb = sb or create_client(config.SUPABASE_URL, config.SUPABASE_KEY)
+        host = socket.gethostname()
+        closed = rolling_source_nights(start_date, now)
+        if not closed:
+            print("[vlm-backfill] no closed nights yet — no-op")
+            return 0
+        ledger = {r["source_date"]: r["status"] for r in load_backfill_ledger(sb, BACKFILL_SELECTOR_VERSION)}
+        job_state = _job_state_by_date(sb)
+        source_date, mode = next_rolling_source_date(closed, ledger, job_state)
+        if source_date is None:
+            print("[vlm-backfill] no backlog — no-op")
+            return 0
+        if mode == "resume":
+            plans = bucket_plans(source_date); start = plans[0].start; end = plans[-1].end
+            due = load_due_jobs_for_selector(sb, BACKFILL_SELECTOR_VERSION, start, end)
+            stats = process_fn(sb, due)
+            scope = _night_camera(sb, source_date)
+            _sync_ledger(sb, source_date, scope, "processing")
+            print(f"[vlm-backfill] resume source={source_date} due={len(due)} stats={stats}")
+            _report_progress(sb, source_date, now, stats, due, host, ledger, closed, _job_state_by_date(sb), send_fn)
+            return 0
+        # mode == "new": 신규 wave. 일일 상한·camera·dedup·부족 후보 처리.
+        remaining = remaining_daily_budget(sb, now)
+        if remaining <= 0:
+            print("[vlm-backfill] daily cap reached — no-op")
+            return 0
+        camera_id = choose_target_camera_for_night(sb, source_date)
+        if camera_id is None:
+            upsert_backfill_ledger(sb, BACKFILL_SELECTOR_VERSION, source_date, "__none__", "no_candidates")
+            print(f"[vlm-backfill] source={source_date} no motion clips — no_candidates")
+            return 0
+        blocked = blocking_error_for_backfill(sb, camera_id)
+        if blocked:
+            upsert_backfill_ledger(sb, BACKFILL_SELECTOR_VERSION, source_date, camera_id, "blocked", last_error=blocked)
+            print(f"[vlm-backfill] blocked code={blocked}")
+            return 0
+        claim_backfill_source_date(sb, BACKFILL_SELECTOR_VERSION, source_date, camera_id)  # 원자 claim(멱등 진행)
+        exclude_ids = load_dedup_clip_ids(sb)  # cross-selector 중복 방지
+        activity_lock = acquire_activity_lock_fn()
+        if activity_lock is None:
+            print("[vlm-backfill] activity worker busy — defer")
+            return 0
+        try:
+            wave = prepare_fn(sb, source_date, camera_id, persist=not dry_run,
+                              exclude_clip_ids=exclude_ids, max_new=min(30, remaining))
+        finally:
+            release_activity_lock_fn(activity_lock)
+        if dry_run:
+            print(json.dumps(wave.to_dict(), ensure_ascii=False))
+            return 0
+        selected_n = len(wave.selected)
+        if selected_n == 0:
+            upsert_backfill_ledger(sb, BACKFILL_SELECTOR_VERSION, source_date, camera_id, "no_candidates")
+            print(f"[vlm-backfill] source={source_date} no_candidates")
+            return 0
+        due = load_due_jobs_for_selector(sb, BACKFILL_SELECTOR_VERSION, wave.start, wave.end)
+        stats = process_fn(sb, due)
+        _sync_ledger(sb, source_date, camera_id, "insufficient_candidates" if selected_n < 30 else "processing")
+        print(f"[vlm-backfill] source={source_date} selected={selected_n} stats={stats}")
+        _report_progress(sb, source_date, now, stats, due, host, ledger, closed, _job_state_by_date(sb), send_fn)
+        return 0
+    finally:
+        release_vlm_lock_fn(vlm_lock)
 
 
-if __name__=="__main__":raise SystemExit(run())
+if __name__ == "__main__":
+    raise SystemExit(run())

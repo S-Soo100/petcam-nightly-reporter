@@ -161,6 +161,21 @@ class FakeSB:
             store=self.store.get("vlm_slack_notifications",[])
             self.store["vlm_slack_notifications"]=[r for r in store if (r["selector_version"],r["window_start"],r["window_end"],r["producer_host"])!=key]
             return _RpcResult(None)
+        if name == "fn_claim_backfill_source_date":
+            store=self.store.setdefault("vlm_backfill_ledger",[])
+            key=(args["p_selector"],args["p_source_date"],args["p_scope"])
+            if any((r["selector_version"],r["source_date"],r["scope"])==key for r in store):
+                return _RpcResult(False)
+            store.append({"selector_version":key[0],"source_date":key[1],"scope":key[2],"status":"processing"})
+            return _RpcResult(True)
+        if name == "fn_upsert_backfill_ledger":
+            store=self.store.setdefault("vlm_backfill_ledger",[])
+            key=(args["p_selector"],args["p_source_date"],args["p_scope"])
+            vals={"status":args["p_status"],"target_count":args["p_target"],"created_count":args["p_created"],"processed_count":args["p_processed"],"succeeded_count":args["p_succeeded"],"terminal_count":args["p_terminal"],"last_error_code":args["p_last_error"]}
+            hit=next((r for r in store if (r["selector_version"],r["source_date"],r["scope"])==key),None)
+            if hit:hit.update(vals)
+            else:store.append({"selector_version":key[0],"source_date":key[1],"scope":key[2],**vals})
+            return _RpcResult(None)
         raise KeyError(name)
 
 class _RpcResult:

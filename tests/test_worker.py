@@ -7,6 +7,7 @@ legacy Claude 호출은 없다. 방어적으로 sampled>0 & 전량 실패인 경
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from reporter import config
 from reporter.worker import _format
 
 _KST = ZoneInfo("Asia/Seoul")
@@ -24,12 +25,19 @@ def _beh(sampled=0, failed=0):
             "shed_observed": False, "drink_observed": False, "feeding_observed": False}
 
 
-def test_format_movement_summary_shape():
+def test_format_movement_summary_shape(monkeypatch):
+    monkeypatch.setattr(config, "WINDOW_HOURS", 2.0)
     msg = _format(_activity(), _beh(), _NOW)
     assert "📊 움직임 수집 요약 (00:00~02:00)" in msg
     assert "· 감지 클립 27개 · 약 14.5분" in msg
     assert "· 집중 시간대: 1시" in msg
     assert "이 메시지는 움직임 수집 통계이며 VLM 분석 결과가 아님" in msg
+
+
+def test_format_preserves_fractional_window_hours(monkeypatch):
+    monkeypatch.setattr(config, "WINDOW_HOURS", 0.5)
+    msg = _format(_activity(), _beh(), _NOW)
+    assert "📊 움직임 수집 요약 (01:30~02:00)" in msg
 
 
 def test_format_sampling_off_has_no_behavior_or_alert():

@@ -97,7 +97,7 @@ def _format(activity: dict, behaviors: dict, now: datetime) -> str:
     if activity["clip_count"] == 0:
         return f"🦎 움직임 없음 ({now:%m/%d %H:%M} KST)"
     disp_end = now.replace(minute=0, second=0, microsecond=0)
-    disp_start = disp_end - timedelta(hours=int(config.WINDOW_HOURS))
+    disp_start = disp_end - timedelta(hours=config.WINDOW_HOURS)
     peak = f"{activity['peak_hour_kst']}시" if activity["peak_hour_kst"] is not None else "분산"
     lines = [
         f"📊 움직임 수집 요약 ({disp_start:%H:%M}~{disp_end:%H:%M})",

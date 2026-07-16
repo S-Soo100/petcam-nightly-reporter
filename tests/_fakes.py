@@ -166,7 +166,7 @@ class FakeSB:
             key=(args["p_selector"],args["p_source_date"],args["p_scope"])
             if any((r["selector_version"],r["source_date"],r["scope"])==key for r in store):
                 return _RpcResult(False)
-            store.append({"selector_version":key[0],"source_date":key[1],"scope":key[2],"status":"processing"})
+            store.append({"id":f"ledger-{len(store)}","selector_version":key[0],"source_date":key[1],"scope":key[2],"status":"processing"})
             return _RpcResult(True)
         if name == "fn_upsert_backfill_ledger":
             store=self.store.setdefault("vlm_backfill_ledger",[])
@@ -174,8 +174,17 @@ class FakeSB:
             vals={"status":args["p_status"],"target_count":args["p_target"],"created_count":args["p_created"],"processed_count":args["p_processed"],"succeeded_count":args["p_succeeded"],"terminal_count":args["p_terminal"],"last_error_code":args["p_last_error"]}
             hit=next((r for r in store if (r["selector_version"],r["source_date"],r["scope"])==key),None)
             if hit:hit.update(vals)
-            else:store.append({"selector_version":key[0],"source_date":key[1],"scope":key[2],**vals})
+            else:store.append({"id":f"ledger-{len(store)}","selector_version":key[0],"source_date":key[1],"scope":key[2],**vals})
             return _RpcResult(None)
+        if name == "fn_release_backfill_claim":
+            store=self.store.setdefault("vlm_backfill_ledger",[])
+            key=(args["p_selector"],args["p_source_date"],args["p_scope"])
+            jobs=self.store.get("clip_vlm_jobs",[])
+            has_jobs=any(j.get("selector_version")==args["p_selector"] and (j.get("rank_features") or {}).get("source_date")==args["p_source_date"] for j in jobs)
+            if has_jobs:return _RpcResult(False)  # job 있으면 해제 금지(DB 강제)
+            before=len(store)
+            self.store["vlm_backfill_ledger"]=[r for r in store if (r["selector_version"],r["source_date"],r["scope"])!=key]
+            return _RpcResult(len(self.store["vlm_backfill_ledger"])<before)
         raise KeyError(name)
 
 class _RpcResult:

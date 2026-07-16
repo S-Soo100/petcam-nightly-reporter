@@ -119,8 +119,14 @@ def _diag_payload(diagnostic):
     return diagnostic.to_dict() if diagnostic is not None else None
 
 
-def process_cli_jobs(sb,jobs,*,analyzer=analyze_batch,download_fn=r2.download_clip,extract_fn=extract_six,auth_check=check_cli_auth,sleep=lambda _s:None):
+# H4: 남은 시간이 이 예산 미만이면 새 batch 를 제출하지 않는다(정규 VLM 시각 보호).
+# analyze_batch_with_retry 최악 = 2 subattempt × 300s timeout + download/frame 여유.
+_BATCH_BUDGET=timedelta(seconds=660)
+
+
+def process_cli_jobs(sb,jobs,*,analyzer=analyze_batch,download_fn=r2.download_clip,extract_fn=extract_six,auth_check=check_cli_auth,sleep=lambda _s:None,deadline=None,clock=None):
     counts=defaultdict(int);diag_counts=defaultdict(int);short_ids=[];breaker=None
+    clock=clock or (lambda:datetime.now(timezone.utc))
     if not jobs:return ProcessResult({},None,(),{})
     try:auth_check()
     except CliBatchError as exc:
@@ -134,6 +140,8 @@ def process_cli_jobs(sb,jobs,*,analyzer=analyze_batch,download_fn=r2.download_cl
     with tempfile.TemporaryDirectory() as tmp:
         for batch in groups.values():
             if breaker:break  # auth/quota/model/clip_set breaker → 이후 batch 호출 중단
+            # H4: 정규 VLM 시각 임박이면 미제출 job 을 queued 로 남기고 중단(다음 cycle resume).
+            if deadline is not None and clock()+_BATCH_BUDGET>deadline:break
             submitted=[];frames={}
             for job in batch[:config.VLM_MAX_PER_CAMERA_WINDOW]:
                 try:

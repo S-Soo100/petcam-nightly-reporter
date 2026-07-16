@@ -255,6 +255,26 @@ def test_cli_provider_auth_breaker_skips_all_batches():
     assert res.counts == {"not_logged_in": 2}
 
 
+def test_process_stops_at_deadline_leaving_remaining_queued():
+    # H4: 정규 VLM 시각 임박이면 미제출 batch 를 queued 로 남기고 중단
+    from datetime import timedelta, timezone as _tz
+    sb, jobs = _two_camera_sb()
+    calls = []
+
+    def analyzer(frame_sets, model):
+        calls.append(set(frame_sets)); return _ok_batch(frame_sets)
+
+    base = datetime(2026, 7, 16, 0, 0, tzinfo=_tz.utc)
+    deadline = base + timedelta(minutes=15)  # _BATCH_BUDGET=11분
+    ticks = iter([base, base + timedelta(minutes=12)])  # group2 check → past deadline
+    res = process_cli_jobs(sb, jobs, analyzer=analyzer, auth_check=lambda: None,
+                           download_fn=lambda _k, d: d, extract_fn=_six,
+                           deadline=deadline, clock=lambda: next(ticks))
+    assert len(calls) == 1  # 1 batch 만 제출
+    j1 = next(r for r in sb.store["clip_vlm_jobs"] if r["id"] == "j1")
+    assert j1["status"] == "queued"  # 2번째 camera job 은 미제출(queued) → 다음 cycle resume
+
+
 def test_cli_provider_model_mismatch_holds_and_stops_further_batches():
     sb, jobs = _two_camera_sb()
     calls = []

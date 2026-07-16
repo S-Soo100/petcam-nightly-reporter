@@ -31,7 +31,7 @@ def test_backfill_installer_has_fail_closed_preflights_and_no_secrets_in_plist()
     assert "R2_SECRET_ACCESS_KEY</key>" not in script
 
 
-def test_backfill_installer_renders_valid_plist_without_real_bootstrap(tmp_path):
+def _stub_env(tmp_path):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     checkpoint = tmp_path / "gate.pth"
@@ -42,16 +42,22 @@ def test_backfill_installer_renders_valid_plist_without_real_bootstrap(tmp_path)
         "#!/bin/sh\n"
         "case \"$*\" in\n"
         "  *GATE_CHECKPOINT_PATH*) printf '%s\\n' \"$CHECKPOINT_STUB\" ;;\n"
+        "  *socket.gethostname*) printf '%s\\n' \"$HOST_STUB\" ;;\n"
         "esac\n"
     )
     for command in ("claude", "launchctl", "uv"):
         (bin_dir / command).chmod(0o755)
-    env = {
+    return {
         **os.environ,
         "HOME": str(tmp_path),
         "PATH": f"{bin_dir}:/usr/bin:/bin",
         "CHECKPOINT_STUB": str(checkpoint),
+        "HOST_STUB": "test-macmini",
     }
+
+
+def test_backfill_installer_renders_valid_plist_without_real_bootstrap(tmp_path):
+    env = {**_stub_env(tmp_path), "VLM_EXPECTED_HOST": "test-macmini"}
     subprocess.run(["bash", "install-launchd-vlm-backfill.sh"], check=True, env=env, capture_output=True, text=True)
     plist_path = tmp_path / "Library/LaunchAgents/com.petcam.vlm-historical-backfill.plist"
     payload = plistlib.loads(plist_path.read_bytes())
@@ -63,3 +69,22 @@ def test_backfill_installer_renders_valid_plist_without_real_bootstrap(tmp_path)
     assert all(entry["Minute"] == 35 for entry in payload["StartCalendarInterval"])  # :35 (정규 :00 과 분리)
     assert payload["EnvironmentVariables"]["ANTHROPIC_MODEL_EXACT"] == "claude-sonnet-5"
     assert payload["EnvironmentVariables"]["REGISTER_HIGHLIGHTS"] == "0"
+    assert payload["EnvironmentVariables"]["VLM_EXPECTED_HOST"] == "test-macmini"  # H2 host 명시
+
+
+def test_backfill_installer_aborts_when_expected_host_missing(tmp_path):
+    env = _stub_env(tmp_path)  # VLM_EXPECTED_HOST 미설정
+    env.pop("VLM_EXPECTED_HOST", None)
+    result = subprocess.run(["bash", "install-launchd-vlm-backfill.sh"], env=env, capture_output=True, text=True)
+    assert result.returncode != 0
+
+
+def test_backfill_installer_aborts_on_host_mismatch(tmp_path):
+    env = {**_stub_env(tmp_path), "VLM_EXPECTED_HOST": "some-other-host"}  # actual=test-macmini
+    result = subprocess.run(["bash", "install-launchd-vlm-backfill.sh"], env=env, capture_output=True, text=True)
+    assert result.returncode != 0
+
+
+def test_backfill_installer_does_not_auto_approve_current_hostname():
+    t = Path("install-launchd-vlm-backfill.sh").read_text()
+    assert 'VLM_EXPECTED_HOST="$ACTUAL_HOST"' not in t

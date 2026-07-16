@@ -23,11 +23,14 @@ from reporter.vlm_backfill_selector import (
     select_bucket_candidates,
     source_nights,
 )
-from reporter.vlm_rolling import remaining_daily_budget, rolling_backfill_allowed_now
+from reporter.vlm_host_guard import HostOwnershipError, require_expected_host
+from reporter.vlm_rolling import next_regular_vlm, remaining_daily_budget, rolling_backfill_allowed_now
 from reporter.vlm_store import (
     claim_backfill_source_date,
     load_backfill_ledger,
     load_dedup_clip_ids,
+    paginate,
+    release_backfill_claim,
     upsert_backfill_ledger,
 )
 from reporter.vlm_candidate_indexer import load_recent_history, load_window_candidates, partition_eligibility
@@ -240,8 +243,8 @@ def next_rolling_source_date(closed_nights, ledger_status, job_state):
 
 
 def _job_state_by_date(sb):
-    rows = (sb.table("clip_vlm_jobs").select("status,rank_features")
-            .eq("selector_version", BACKFILL_SELECTOR_VERSION).execute().data)
+    rows = paginate(lambda: sb.table("clip_vlm_jobs").select("id,status,rank_features")
+                    .eq("selector_version", BACKFILL_SELECTOR_VERSION))  # 1000행+ 전량
     out = {}
     for r in rows:
         d = (r.get("rank_features") or {}).get("source_date")
@@ -310,16 +313,27 @@ def _waiting_dates(closed_nights, ledger_status, job_state):
     return n
 
 
+HOST_MISMATCH_RC = 3
+
+
 def run(
     *, sb=None, now=None, dry_run=False, process_fn=process_cli_jobs, prepare_fn=prepare_wave,
     acquire_vlm_lock_fn=acquire_vlm_lock, release_vlm_lock_fn=release_vlm_lock,
     acquire_activity_lock_fn=acquire_activity_lock, release_activity_lock_fn=release_activity_lock,
     send_fn=None, allowed_fn=rolling_backfill_allowed_now, start_date=EPOCH_START,
+    expected_host=None, hostname_fn=socket.gethostname,
 ) -> int:
     now = now or datetime.now(timezone.utc)
     if send_fn is None:
         send_fn = slack.post_slack
-    # schedule guard: 정규 VLM ±30분이면 lock/DB/R2/Gate/Claude 전에 no-op(fail-closed).
+    # H2 fail-closed host guard: lock/DB/R2/Gate/Claude/Slack 어느 것도 건드리기 전에 먼저 판정.
+    expected = config.VLM_EXPECTED_HOST if expected_host is None else expected_host
+    try:
+        require_expected_host(hostname_fn(), expected)
+    except HostOwnershipError as exc:
+        print(f"[vlm-backfill] {exc}")
+        return HOST_MISMATCH_RC
+    # schedule guard: 정규 VLM ±30분이면 no-op(fail-closed).
     if not allowed_fn(now):
         print("[vlm-backfill] near regular VLM window — no-op")
         return 0
@@ -339,10 +353,11 @@ def run(
         if source_date is None:
             print("[vlm-backfill] no backlog — no-op")
             return 0
+        deadline = next_regular_vlm(now)  # H4: 정규 VLM 시각 전에 batch 제출을 멈춘다
         if mode == "resume":
             plans = bucket_plans(source_date); start = plans[0].start; end = plans[-1].end
             due = load_due_jobs_for_selector(sb, BACKFILL_SELECTOR_VERSION, start, end)
-            stats = process_fn(sb, due)
+            stats = process_fn(sb, due, deadline=deadline)
             scope = _night_camera(sb, source_date)
             _sync_ledger(sb, source_date, scope, "processing")
             print(f"[vlm-backfill] resume source={source_date} due={len(due)} stats={stats}")
@@ -363,15 +378,26 @@ def run(
             upsert_backfill_ledger(sb, BACKFILL_SELECTOR_VERSION, source_date, camera_id, "blocked", last_error=blocked)
             print(f"[vlm-backfill] blocked code={blocked}")
             return 0
-        claim_backfill_source_date(sb, BACKFILL_SELECTOR_VERSION, source_date, camera_id)  # 원자 claim(멱등 진행)
-        exclude_ids = load_dedup_clip_ids(sb)  # cross-selector 중복 방지
+        # H1: activity lock 을 먼저 확보한 뒤 claim 한다. lock 실패로 processing ledger 만 남지 않게.
         activity_lock = acquire_activity_lock_fn()
         if activity_lock is None:
             print("[vlm-backfill] activity worker busy — defer")
             return 0
         try:
-            wave = prepare_fn(sb, source_date, camera_id, persist=not dry_run,
-                              exclude_clip_ids=exclude_ids, max_new=min(30, remaining))
+            # 원자 claim: loser 는 Gate/R2/Claude/job 생성 없이 no-op(H1.1).
+            if not claim_backfill_source_date(sb, BACKFILL_SELECTOR_VERSION, source_date, camera_id):
+                print(f"[vlm-backfill] claim loser source={source_date} — no-op")
+                return 0
+            exclude_ids = load_dedup_clip_ids(sb)  # cross-selector 중복 방지
+            try:
+                wave = prepare_fn(sb, source_date, camera_id, persist=not dry_run,
+                                  exclude_clip_ids=exclude_ids, max_new=min(30, remaining))
+            except Exception as exc:
+                # H1.3: job 생성 전 예외면 claim 을 해제해 날짜가 영구 고착되지 않게 한다
+                # (job 이 하나라도 있으면 DB 가 해제를 거부 → 다음 cycle resume 으로 복구, H1.4).
+                release_backfill_claim(sb, BACKFILL_SELECTOR_VERSION, source_date, camera_id)
+                print(f"[vlm-backfill] wave prep failed source={source_date} {type(exc).__name__} — claim released")
+                return 0
         finally:
             release_activity_lock_fn(activity_lock)
         if dry_run:
@@ -383,7 +409,7 @@ def run(
             print(f"[vlm-backfill] source={source_date} no_candidates")
             return 0
         due = load_due_jobs_for_selector(sb, BACKFILL_SELECTOR_VERSION, wave.start, wave.end)
-        stats = process_fn(sb, due)
+        stats = process_fn(sb, due, deadline=deadline)
         _sync_ledger(sb, source_date, camera_id, "insufficient_candidates" if selected_n < 30 else "processing")
         print(f"[vlm-backfill] source={source_date} selected={selected_n} stats={stats}")
         _report_progress(sb, source_date, now, stats, due, host, ledger, closed, _job_state_by_date(sb), send_fn)

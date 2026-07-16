@@ -17,6 +17,13 @@ from reporter.vlm_backfill_worker import (
 
 _KST = ZoneInfo("Asia/Seoul")
 from reporter.vlm_models import CandidateClip, SelectedCandidate
+
+
+def _run(**kwargs):
+    """host guard 를 통과시키는 기본 host 를 주입한 run() 래퍼(H2 이후 공통)."""
+    kwargs.setdefault("expected_host", "test-host")
+    kwargs.setdefault("hostname_fn", lambda: "test-host")
+    return run(**kwargs)
 from tests._fakes import FakeSB
 
 
@@ -90,7 +97,7 @@ def test_backfill_allowed_converts_utc_to_kst():
 def test_backfill_night_run_is_noop_before_lock_or_db():
     def boom(*_args, **_kwargs):
         raise AssertionError("night backfill must no-op before lock/DB/Gate/Claude")
-    assert run(
+    assert _run(
         now=datetime(2026, 7, 15, 22, tzinfo=_KST),
         acquire_vlm_lock_fn=boom, release_vlm_lock_fn=boom,
         acquire_activity_lock_fn=boom, process_fn=boom, prepare_fn=boom,
@@ -100,12 +107,12 @@ def test_backfill_night_run_is_noop_before_lock_or_db():
 def test_backfill_noop_cycles_send_no_slack():
     sent = []
     # 야간 guard no-op → Slack 0
-    assert run(now=datetime(2026, 7, 15, 22, tzinfo=_KST), acquire_vlm_lock_fn=lambda: object(),
+    assert _run(now=datetime(2026, 7, 15, 22, tzinfo=_KST), acquire_vlm_lock_fn=lambda: object(),
                release_vlm_lock_fn=lambda _fd: None, send_fn=lambda t: sent.append(t) or True) == 0
     # activity worker busy defer → Slack 0
     start = bucket_plans(source_nights()[0])[0].start
     sb = FakeSB({"motion_clips": [_motion_clip("a", "camera-a", start)]})
-    assert run(sb=sb, now=datetime(2026, 7, 15, 11, tzinfo=_KST),
+    assert _run(sb=sb, now=datetime(2026, 7, 15, 11, tzinfo=_KST),
                acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
                acquire_activity_lock_fn=lambda: None,
                prepare_fn=lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("defer")),
@@ -182,10 +189,10 @@ def test_backfill_never_drains_regular_selector_jobs():
     regular = {"id": "regular", "selector_version": "budget-router-v1", "status": "queued", "queued_at": "2026-07-15T00:00:00+00:00"}
     sb = FakeSB({"clip_vlm_jobs": [regular], "motion_clips": [_motion_clip("a", "camera-a", start)]})
     calls = []
-    assert run(
+    assert _run(
         sb=sb,
         now=datetime(2026, 7, 15, 2, tzinfo=timezone.utc),
-        process_fn=lambda _sb, jobs: calls.append([job["id"] for job in jobs]) or {"succeeded": len(jobs)},
+        process_fn=lambda _sb, jobs, **_k: calls.append([job["id"] for job in jobs]) or {"succeeded": len(jobs)},
         acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
         acquire_activity_lock_fn=lambda: None,  # prepare 직전 defer — regular 이 새지 않는지만 검증
         prepare_fn=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("must not build wave")),
@@ -197,7 +204,7 @@ def test_backfill_never_drains_regular_selector_jobs():
 def test_activity_worker_lock_defers_gate_prepool():
     start = bucket_plans(source_nights()[0])[0].start
     sb = FakeSB({"motion_clips": [_motion_clip("a", "camera-a", start)]})
-    assert run(
+    assert _run(
         sb=sb,
         now=datetime(2026, 7, 15, 2, tzinfo=timezone.utc),
         acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
@@ -218,7 +225,7 @@ def test_previous_quota_error_blocks_future_backfill_wave():
             "error_code": "quota_exceeded",
         }],
     })
-    assert run(
+    assert _run(
         sb=sb,
         now=datetime(2026, 7, 15, 11, tzinfo=_KST),
         acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
@@ -232,10 +239,10 @@ def test_existing_30_job_wave_resumes_without_gate_or_reselection():
     sb = FakeSB({"motion_clips": [_motion_clip("a", "camera-a", start)], "clip_vlm_jobs": jobs})
     calls = []
     sent = []
-    assert run(
+    assert _run(
         sb=sb,
         now=datetime(2026, 7, 15, 11, tzinfo=_KST),
-        process_fn=lambda _sb, due: calls.append([job["id"] for job in due]) or {"succeeded": len(due)},
+        process_fn=lambda _sb, due, **_k: calls.append([job["id"] for job in due]) or {"succeeded": len(due)},
         acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
         prepare_fn=lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("resume must not reselect")),
         acquire_activity_lock_fn=lambda: (_ for _ in ()).throw(AssertionError("resume must not run Gate")),
@@ -252,10 +259,10 @@ def test_rolling_resumes_open_night_without_reselection_or_recreate():
     start = bucket_plans(source_nights()[0])[0].start
     sb = FakeSB({"motion_clips": [_motion_clip("a", "camera-a", start)], "clip_vlm_jobs": jobs})
     calls = []; sent = []
-    assert run(
+    assert _run(
         sb=sb,
         now=datetime(2026, 7, 15, 11, tzinfo=_KST),
-        process_fn=lambda _sb, due: calls.append(len(due)) or {"succeeded": len(due)},
+        process_fn=lambda _sb, due, **_k: calls.append(len(due)) or {"succeeded": len(due)},
         acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
         prepare_fn=lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("resume must not reselect")),
         acquire_activity_lock_fn=lambda: (_ for _ in ()).throw(AssertionError("resume must not run Gate")),
@@ -268,14 +275,14 @@ def test_rolling_resumes_open_night_without_reselection_or_recreate():
 
 def test_rolling_daily_cap_blocks_new_wave_at_600():
     # 오늘 이미 600개 생성 → 신규 wave 생성 안 함(no-op), Slack 0
-    today_jobs = [{"selector_version": BACKFILL_SELECTOR_VERSION, "status": "succeeded",
+    today_jobs = [{"id": f"cap-{i:04d}", "selector_version": BACKFILL_SELECTOR_VERSION, "status": "succeeded",
                    "created_at": "2026-07-15T02:00:00+00:00",  # KST 11:00 오늘
-                   "rank_features": {"source_date": "2026-07-07"}} for _ in range(600)]
+                   "rank_features": {"source_date": "2026-07-07"}} for i in range(600)]
     # 07-07 은 전부 succeeded(open 0) → 파생 complete. 신규 대상은 07-08(미생성).
     start = bucket_plans(EPOCH_START + timedelta(days=1))[0].start  # 07-08 night
     sb = FakeSB({"clip_vlm_jobs": today_jobs, "motion_clips": [_motion_clip("a", "camera-a", start)]})
     sent = []
-    assert run(sb=sb, now=datetime(2026, 7, 15, 2, tzinfo=timezone.utc),  # KST 11:00
+    assert _run(sb=sb, now=datetime(2026, 7, 15, 2, tzinfo=timezone.utc),  # KST 11:00
                acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
                prepare_fn=lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("cap must block new wave")),
                send_fn=lambda t: sent.append(t) or True) == 0
@@ -286,7 +293,7 @@ def test_rolling_no_candidates_night_closes_via_ledger_no_slack():
     # 대상 night 에 motion clip 0 → ledger no_candidates, Slack 0
     sb = FakeSB()  # motion_clips 없음
     sent = []
-    assert run(sb=sb, now=datetime(2026, 7, 15, 2, tzinfo=timezone.utc),  # KST 11:00
+    assert _run(sb=sb, now=datetime(2026, 7, 15, 2, tzinfo=timezone.utc),  # KST 11:00
                acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
                prepare_fn=lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("no wave for 0 clips")),
                send_fn=lambda t: sent.append(t) or True) == 0
@@ -295,9 +302,119 @@ def test_rolling_no_candidates_night_closes_via_ledger_no_slack():
     assert sent == []
 
 
+def test_backfill_host_mismatch_fails_closed_before_any_work():
+    # H2: MacBook 등 expected host 불일치 → lock/DB/R2/Gate/Claude/Slack 전 fail-closed(nonzero)
+    def boom(*_a, **_k):
+        raise AssertionError("host mismatch must stop before lock/DB/Claude/Slack")
+    rc = run(now=datetime(2026, 7, 15, 11, tzinfo=_KST),
+             expected_host="mac-mini.verified", hostname_fn=lambda: "macbook.local",
+             acquire_vlm_lock_fn=boom, allowed_fn=boom, process_fn=boom, prepare_fn=boom, send_fn=boom)
+    assert rc != 0
+
+
+def test_backfill_blank_expected_host_fails_closed():
+    def boom(*_a, **_k):
+        raise AssertionError("blank expected host must fail closed")
+    rc = run(now=datetime(2026, 7, 15, 11, tzinfo=_KST),
+             expected_host="", hostname_fn=lambda: "macbook.local",
+             acquire_vlm_lock_fn=boom, allowed_fn=boom, send_fn=boom)
+    assert rc != 0
+
+
+def _ledger_row(source_date, scope="camera-a", status="processing"):
+    return {"id": "l0", "selector_version": BACKFILL_SELECTOR_VERSION,
+            "source_date": source_date.isoformat(), "scope": scope, "status": status}
+
+
+def test_rolling_claim_loser_no_ops_without_gate_or_creation():
+    # H1.1: 이미 claim 된 날짜 → claim=false → Gate/R2/Claude/job 생성 0, no-op
+    start = bucket_plans(EPOCH_START)[0].start
+    sb = FakeSB({"motion_clips": [_motion_clip("a", "camera-a", start)],
+                 "vlm_backfill_ledger": [_ledger_row(EPOCH_START)]})
+
+    def boom(*_a, **_k):
+        raise AssertionError("claim loser must not build/process")
+
+    assert _run(sb=sb, now=datetime(2026, 7, 15, 11, tzinfo=_KST),
+                acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
+                acquire_activity_lock_fn=lambda: object(), release_activity_lock_fn=lambda _l: None,
+                prepare_fn=boom, process_fn=boom, send_fn=lambda t: True) == 0
+
+
+def test_rolling_activity_lock_defer_writes_no_claim():
+    # H1.2: activity lock 을 먼저 확보 → lock 실패 시 claim(processing ledger) 을 남기지 않는다
+    start = bucket_plans(EPOCH_START)[0].start
+    sb = FakeSB({"motion_clips": [_motion_clip("a", "camera-a", start)]})
+    assert _run(sb=sb, now=datetime(2026, 7, 15, 11, tzinfo=_KST),
+                acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
+                acquire_activity_lock_fn=lambda: None,
+                prepare_fn=lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("no wave")),
+                send_fn=lambda t: True) == 0
+    assert sb.store.get("vlm_backfill_ledger", []) == []  # claim 미기록
+
+
+def test_rolling_pre_create_exception_releases_claim_for_retry():
+    # H1.3: job 생성 전 예외 → claim 해제(job 없으므로) → 날짜 고착 없음
+    start = bucket_plans(EPOCH_START)[0].start
+    sb = FakeSB({"motion_clips": [_motion_clip("a", "camera-a", start)]})
+
+    def prepare_boom(*_a, **_k):
+        raise RuntimeError("gate down")
+
+    assert _run(sb=sb, now=datetime(2026, 7, 15, 11, tzinfo=_KST),
+                acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
+                acquire_activity_lock_fn=lambda: object(), release_activity_lock_fn=lambda _l: None,
+                prepare_fn=prepare_boom, send_fn=lambda t: True) == 0
+    assert not any(r["source_date"] == EPOCH_START.isoformat()
+                   for r in sb.store.get("vlm_backfill_ledger", []))  # 해제됨 → 재시도 가능
+
+
+def test_rolling_partial_create_keeps_claim_and_resumes():
+    # H1.4/H1.6: job 이 이미 있으면 release 거부(DB 강제), 다음 cycle 은 resume
+    jobs = _jobs_for_day(EPOCH_START, count=3, status="failed_retryable")
+    start = bucket_plans(EPOCH_START)[0].start
+    sb = FakeSB({"clip_vlm_jobs": jobs, "motion_clips": [_motion_clip("a", "camera-a", start)],
+                 "vlm_backfill_ledger": [_ledger_row(EPOCH_START)]})
+    from reporter.vlm_store import release_backfill_claim
+    assert release_backfill_claim(sb, BACKFILL_SELECTOR_VERSION, EPOCH_START, "camera-a") is False  # job 있으면 해제 금지
+    calls = []
+    assert _run(sb=sb, now=datetime(2026, 7, 15, 11, tzinfo=_KST),
+                process_fn=lambda _sb, due, **_k: calls.append(len(due)) or {"succeeded": len(due)},
+                acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
+                prepare_fn=lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("resume must not reselect")),
+                acquire_activity_lock_fn=lambda: (_ for _ in ()).throw(AssertionError("resume must not run Gate")),
+                send_fn=lambda t: True) == 0
+    assert calls == [3]  # partial 은 resume 으로 복구
+
+
+def test_rolling_passes_regular_vlm_deadline_to_process():
+    # H4: backfill 이 process 에 정규 VLM 시각 deadline 을 전달(정규까지 lock 미보유 보장)
+    from reporter.vlm_rolling import next_regular_vlm
+    now = datetime(2026, 7, 16, 22, 35, tzinfo=_KST)  # 허용(22:35), 다음 정규 = 07-17 00:00
+    jobs = _jobs_for_day(source_nights()[0], count=5, status="failed_retryable")
+    sb = FakeSB({"clip_vlm_jobs": jobs,
+                 "motion_clips": [_motion_clip("a", "camera-a", bucket_plans(source_nights()[0])[0].start)]})
+    captured = {}
+
+    def process_fn(_sb, due, **kw):
+        captured.update(kw); return {"succeeded": len(due)}
+
+    assert _run(sb=sb, now=now, process_fn=process_fn,
+                acquire_vlm_lock_fn=lambda: object(), release_vlm_lock_fn=lambda _fd: None,
+                send_fn=lambda t: True) == 0
+    assert captured.get("deadline") == next_regular_vlm(now)
+
+
+def test_next_regular_vlm_is_next_of_22_00_02_04():
+    from reporter.vlm_rolling import next_regular_vlm
+    assert next_regular_vlm(datetime(2026, 7, 16, 22, 35, tzinfo=_KST)) == datetime(2026, 7, 17, 0, tzinfo=_KST).astimezone(timezone.utc)
+    assert next_regular_vlm(datetime(2026, 7, 16, 12, 0, tzinfo=_KST)) == datetime(2026, 7, 16, 22, tzinfo=_KST).astimezone(timezone.utc)
+    assert next_regular_vlm(datetime(2026, 7, 16, 0, 30, tzinfo=_KST)) == datetime(2026, 7, 16, 2, tzinfo=_KST).astimezone(timezone.utc)
+
+
 def test_rolling_schedule_guard_noop_before_lock():
     def boom(*_a, **_k):
         raise AssertionError("schedule guard must no-op before lock/DB")
     # 21:35 KST = 정규 22:00 25분 전 → guard skip
-    assert run(now=datetime(2026, 7, 15, 21, 35, tzinfo=_KST),
+    assert _run(now=datetime(2026, 7, 15, 21, 35, tzinfo=_KST),
                acquire_vlm_lock_fn=boom, process_fn=boom, prepare_fn=boom, send_fn=boom) == 0

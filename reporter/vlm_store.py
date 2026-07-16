@@ -24,9 +24,24 @@ def release_vlm_slack_notification(sb,selector_version,start,end,host):
         "p_window_end":end.isoformat(),"p_host":host,
     }).execute()
 
+def paginate(make_query,page_size=1000):
+    """PostgREST 1000행 상한을 넘겨 전량 조회. id 오름차순 stable range pagination."""
+    rows=[];offset=0
+    while True:
+        page=make_query().order("id").range(offset,offset+page_size-1).execute().data
+        rows+=page
+        if len(page)<page_size:return rows
+        offset+=page_size
+
 def claim_backfill_source_date(sb,selector_version,source_date,scope):
     """rolling backfill 날짜 원자 claim(동시 worker 중복 wave 방지). 최초 1회만 True."""
     return bool(sb.rpc("fn_claim_backfill_source_date",{
+        "p_selector":selector_version,"p_source_date":source_date.isoformat(),"p_scope":scope,
+    }).execute().data)
+
+def release_backfill_claim(sb,selector_version,source_date,scope):
+    """claim 해제(H1.3). DB 가 해당 selector/source_date 에 job 이 하나도 없을 때만 삭제하도록 강제."""
+    return bool(sb.rpc("fn_release_backfill_claim",{
         "p_selector":selector_version,"p_source_date":source_date.isoformat(),"p_scope":scope,
     }).execute().data)
 
@@ -38,11 +53,11 @@ def upsert_backfill_ledger(sb,selector_version,source_date,scope,status,*,target
     }).execute()
 
 def load_backfill_ledger(sb,selector_version):
-    return sb.table("vlm_backfill_ledger").select("source_date,scope,status").eq("selector_version",selector_version).execute().data
+    return paginate(lambda:sb.table("vlm_backfill_ledger").select("id,source_date,scope,status").eq("selector_version",selector_version))
 
 def load_dedup_clip_ids(sb):
-    """모든 selector 의 clip_vlm_jobs clip_id 집합(cross-selector 중복 분석 방지)."""
-    return {r["clip_id"] for r in sb.table("clip_vlm_jobs").select("clip_id").execute().data if r.get("clip_id")}
+    """모든 selector 의 clip_vlm_jobs clip_id 집합(cross-selector 중복 분석 방지). 1000행+ 전량."""
+    return {r["clip_id"] for r in paginate(lambda:sb.table("clip_vlm_jobs").select("id,clip_id")) if r.get("clip_id")}
 
 def load_due_jobs(sb,limit=64):
     rows=[]

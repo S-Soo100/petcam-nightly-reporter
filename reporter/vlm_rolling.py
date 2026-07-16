@@ -30,6 +30,19 @@ def rolling_backfill_allowed_now(now: datetime) -> bool:
     return True
 
 
+def next_regular_vlm(now: datetime) -> datetime:
+    """다음 정규 VLM 시각(22/00/02/04 KST)을 UTC 로 반환. backfill runtime deadline 계산용."""
+    kst = now.astimezone(KST)
+    candidates = []
+    for day_offset in (0, 1):
+        day = (kst + timedelta(days=day_offset)).date()
+        for hour in (0, 2, 4, 22):
+            t = datetime(day.year, day.month, day.day, hour, tzinfo=KST)
+            if t > kst:
+                candidates.append(t)
+    return min(candidates).astimezone(timezone.utc)
+
+
 def _kst_day_bounds_utc(now: datetime) -> tuple[datetime, datetime]:
     kst = now.astimezone(KST)
     start = datetime(kst.year, kst.month, kst.day, tzinfo=KST)

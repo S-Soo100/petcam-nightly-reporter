@@ -669,6 +669,31 @@ Expected: feature branch가 origin과 IN SYNC. main은 아직 변경하지 않�
 - Consumes: feature branch의 정확한 `FEATURE_SHA`, local mp4 11개
 - Produces: 수용 기준 통과 시 main fast-forward와 Mac mini production main pull
 
+- [ ] **Step 0: 변경 전 11:35 retry 결과를 read-only 기준선으로 고정한다**
+
+Supabase SQL editor/MCP의 read-only query로 다음 열만 조회한다. `reasoning`과 전체 UUID는 결과 파일에 넣지 않는다.
+
+```sql
+select
+  left(clip_id::text, 8) as clip8,
+  status,
+  result ->> 'action' as action,
+  attempt_count,
+  error_code,
+  model_actual,
+  prompt_version
+from public.clip_vlm_jobs
+where selector_version = 'budget-router-backfill-20260707-14-v1'
+  and left(clip_id::text, 8) in (
+    '9e05ad4c','4e99ed40','9d1d2cfb','ab273d21','ad1772c6','941aadb9',
+    'ab8cd4b0','1d34eb48','a3774a4f','ca27e1f3','864c45da'
+  )
+order by clip8;
+```
+
+Required: short ID 11개가 각각 정확히 1행. 결과를
+`/Users/baek/petcam-lab/storage/retry-review-20260711/pre-v4.1-retry-baseline.json`에 저장하되 git에는 추가하지 않는다. 이 결과를 본 뒤에도 `human-blind-manifest.json`은 수정하지 않는다.
+
 - [ ] **Step 1: Mac mini production 상태를 read-only로 고정한다**
 
 ```bash

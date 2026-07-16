@@ -14,7 +14,7 @@ from reporter.indexer import ClipMeta
 
 
 def should_register(action: str) -> bool:
-    """등록 대상 판정 — moving(흔함)/error(분류실패)/unseen(게코부재)은 제외."""
+    """등록 대상 판정 — moving(흔함)/basking(휴식·비정보성)/error(분류실패)/unseen(게코부재)/shedding은 제외."""
     return bool(action) and action not in config.REGISTER_SKIP_ACTIONS
 
 

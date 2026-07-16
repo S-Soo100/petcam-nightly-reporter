@@ -211,8 +211,11 @@ def run(
         model_version = model_version_for(checkpoint)
         ckpt_sha = checkpoint_sha256(checkpoint)
         start = now - timedelta(hours=config.ACTIVITY_WINDOW_HOURS)
+        # min_frames 를 policy 에서 명시 전달 — indexer 의 완료 판정(완전 prelabel 링크)과
+        # assess_clip 의 최소 프레임 barrier 가 같은 정책 최소치를 공유하게 한다(설계 §5).
         clips = list_unprocessed_clips(
-            sb, camera_ids, policy.version, start, now, limit=config.ACTIVITY_BATCH_LIMIT
+            sb, camera_ids, policy.version, start, now,
+            min_frames=policy.min_frames, limit=config.ACTIVITY_BATCH_LIMIT,
         )
         if not clips:
             print(f"[activity] {now:%m-%d %H:%M} cameras={len(camera_ids)} no unprocessed clips", flush=True)

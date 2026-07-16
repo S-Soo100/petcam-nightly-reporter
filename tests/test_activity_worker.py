@@ -87,6 +87,85 @@ def test_process_batch_isolates_one_failure():
     assert {r["clip_id"] for r in sb.store["clip_prelabels"]} == {"c1", "c3"}
 
 
+def test_process_batch_insufficient_frames_skips_store_and_continues():
+    # assess_fn 이 InsufficientSampleFrames 를 던지면 그 clip 은 store 되지 않고 failed 로
+    # 집계되며, 나머지 clip 은 계속 처리된다(불완전 evidence 가 완료로 굳지 않음).
+    from reporter.gate_runner import InsufficientSampleFrames
+
+    sb = FakeSB({})
+    clips = [_clip("c1"), _clip("c2"), _clip("c3")]
+
+    def assess(path, det, pol, ck, clip_id):
+        if clip_id == "c2":
+            raise InsufficientSampleFrames(found=0, required=6)
+        return _ga(clip_id, "active")
+
+    stats = activity_worker.process_batch(
+        sb, clips, None, POL, "ck", PROD,
+        download_fn=_dl_ok, assess_fn=assess, store_fn=store_evidence_and_assessment,
+    )
+    assert stats["ok"] == 2 and stats["failed"] == 1
+    # c2 는 prelabel/assessment 어디에도 저장되지 않음
+    assert {r["clip_id"] for r in sb.store["clip_prelabels"]} == {"c1", "c3"}
+    assert {r["clip_id"] for r in sb.store["clip_activity_assessments"]} == {"c1", "c3"}
+
+
+def test_process_batch_relinks_current_assessment_to_new_complete_prelabel():
+    # self-healing: 기존 0프레임 prelabel + 그것을 가리키는 current assessment 를 시드.
+    # 재처리(12프레임 성공)하면 (a) 옛 prelabel 은 보존, (b) 새 12프레임 prelabel 추가,
+    # (c) 같은 (clip_id, policy) assessment 가 새 prelabel 을 가리킨다(설계 §5).
+    old_pre = {"id": "old-pre", "clip_id": "c1", "model_version": "gecko_v2", "schema_version": "sv1",
+               "checkpoint_sha256": "sha", "threshold": 0.25, "sampler_version": "s", "frames_sampled": 0}
+    old_assess = {"id": "assess-c1", "clip_id": "c1", "policy_version": "pol-v0", "prelabel_id": "old-pre"}
+    sb = FakeSB({"clip_prelabels": [old_pre], "clip_activity_assessments": [old_assess]})
+
+    stats = activity_worker.process_batch(
+        sb, [_clip("c1")], detector=None, policy=POL, checkpoint_path="ck", producer=PROD,
+        download_fn=_dl_ok,
+        assess_fn=lambda path, det, pol, ck, clip_id: _ga(clip_id, "active"),  # 12프레임 성공
+        store_fn=store_evidence_and_assessment,
+    )
+    assert stats["ok"] == 1 and stats["failed"] == 0
+    pres = sb.store["clip_prelabels"]
+    # (a) 옛 0프레임 prelabel 보존
+    assert any(p["id"] == "old-pre" and p["frames_sampled"] == 0 for p in pres)
+    # (b) 새 12프레임 prelabel 추가
+    new_pre = [p for p in pres if p["id"] != "old-pre"]
+    assert len(new_pre) == 1 and new_pre[0]["frames_sampled"] == 12
+    # (c) current assessment 는 그대로 1개인데 새 prelabel 을 가리킴 (relink)
+    assessments = sb.store["clip_activity_assessments"]
+    assert len(assessments) == 1
+    assert assessments[0]["clip_id"] == "c1"
+    assert assessments[0]["prelabel_id"] == new_pre[0]["id"] != "old-pre"
+
+
+def test_run_passes_policy_min_frames_to_indexer(monkeypatch):
+    # 회귀 가드: 미래에 policy.min_frames 가 바뀌어도 worker 가 그 값을 indexer 로 명시 전달.
+    from reporter import activity_worker as aw
+    from reporter import config as cfg
+    monkeypatch.setattr(cfg, "ACTIVITY_POLICY_VERSION", "activity-v1")
+    captured = {}
+
+    def fake_list(sb, camera_ids, policy_version, start, end, *, min_frames, limit, **_k):
+        captured["min_frames"] = min_frames
+        captured["policy_version"] = policy_version
+        return []  # 빈 batch → rc 0
+
+    monkeypatch.setattr(aw, "list_unprocessed_clips", fake_list)
+    sb = FakeSB({"camera_activity_filter_settings": [_srow("cam-A", "activity-v1")],
+                 "motion_clips": []})
+    rc = aw.run(
+        sb=sb, now=_NOW,
+        acquire_lock_fn=lambda: object(), release_lock_fn=lambda _lock: None,
+        load_detector_fn=lambda *a, **k: object(),
+        download_fn=lambda key, dest: None, assess_fn=lambda *a, **k: None, **_GUARD,
+    )
+    assert rc == 0
+    # activity-v1 의 min_frames 기본값(6)이 그대로 흘러야 한다
+    from reporter.activity_worker import build_activity_policy
+    assert captured["min_frames"] == build_activity_policy().min_frames == 6
+
+
 def test_process_batch_counts_mixed_decisions():
     sb = FakeSB({})
     clips = [_clip("c1"), _clip("c2"), _clip("c3")]
@@ -273,6 +352,29 @@ def test_run_processes_only_matching_policy(monkeypatch):
     assert calls["det"] == 1  # 일치 카메라 있어 detector 로드
     assert processed == ["a1"]  # cam-A(일치) clip 만 처리, cam-B(불일치) 제외
     assert {r["clip_id"] for r in sb.store["clip_prelabels"]} == {"a1"}
+
+
+def test_run_returns_1_when_clip_rejected_for_insufficient_frames(monkeypatch):
+    # 불완전 프레임으로 assess 가 reject → clip 저장 0, cycle 은 nonzero(재시도 유도).
+    from reporter import config as cfg
+    from reporter.gate_runner import InsufficientSampleFrames
+    monkeypatch.setattr(cfg, "ACTIVITY_POLICY_VERSION", "activity-v1")
+    mc = [{"id": "a1", "camera_id": "cam-A", "started_at": "2026-07-14T01:00:00+00:00",
+           "duration_sec": 10.0, "r2_key": "ka", "motion_score": 0.1}]
+    sb = FakeSB({"camera_activity_filter_settings": [_srow("cam-A", "activity-v1")], "motion_clips": mc})
+
+    def assess(path, det, pol, ck, clip_id, **k):
+        raise InsufficientSampleFrames(found=0, required=6)
+
+    rc = activity_worker.run(
+        sb=sb, now=_NOW,
+        acquire_lock_fn=lambda: object(), release_lock_fn=lambda _lock: None,
+        load_detector_fn=lambda *a, **k: object(),
+        download_fn=lambda key, dest: Path(dest).write_bytes(b"x"),
+        assess_fn=assess, **_GUARD,
+    )
+    assert rc == 1  # 실패 clip 존재 → nonzero exit
+    assert "clip_prelabels" not in sb.store or not sb.store["clip_prelabels"]
 
 
 # --- §5.1 fail-closed host guard ---

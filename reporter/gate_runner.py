@@ -24,6 +24,20 @@ from gecko_vision_gate.provenance import (
 from gecko_vision_gate.schema import PrelabelResult
 
 
+class InsufficientSampleFrames(Exception):
+    """샘플된 프레임이 policy 최소치 미만 — 저장 가능한 evidence 를 조립하지 않는다.
+
+    Gate sampler(순차 fallback 포함)가 실제로 읽은 프레임이 `policy.min_frames` 미만이면,
+    detector·DB store 에 도달하기 전에 이 예외를 던져 불완전 evidence 가 완료로 굳는 것을 막는다.
+    로그 위생상 파일 경로를 담지 않고 개수만 노출한다(§5.3).
+    """
+
+    def __init__(self, found: int, required: int):
+        self.found = found
+        self.required = required
+        super().__init__(f"insufficient sample frames: found={found} required={required}")
+
+
 @dataclass(frozen=True, slots=True)
 class GateAssessment:
     """한 clip 의 evidence + motion + decision + provenance 묶음 (store 로 넘어감)."""
@@ -58,6 +72,11 @@ def assess_clip(
 ) -> GateAssessment:
     """mp4 → 균등 샘플 → evidence → motion → four-state 판정 → provenance."""
     frames = sample_fn(video_path, num_frames)
+    # 최소 프레임 barrier: fallback 이후에도 min_frames 미달이면 detector·store 도달 전에 중단.
+    # 불완전(부분/빈) 샘플을 정상 evidence 로 조립하지 않는다(설계 §4.3). process_batch 가
+    # 예외를 잡아 failed 로 집계하고 다음 clip 을 계속 처리하며, cycle 은 nonzero 로 끝난다.
+    if len(frames) < policy.min_frames:
+        raise InsufficientSampleFrames(found=len(frames), required=policy.min_frames)
     result = prelabel_from_frames(
         frames,
         threshold=policy.gate_threshold,

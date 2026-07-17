@@ -74,6 +74,12 @@ ACTIVITY_EXPECTED_HOST = os.environ.get("ACTIVITY_EXPECTED_HOST", "")
 PYTHON_EVIDENCE_ENABLED = os.environ.get("PYTHON_EVIDENCE_ENABLED", "0") == "1"
 PYTHON_EVIDENCE_BATCH_LIMIT = min(max(int(os.environ.get("PYTHON_EVIDENCE_BATCH_LIMIT", "30")), 1), 200)
 PYTHON_EVIDENCE_EXPECTED_HOST = os.environ.get("PYTHON_EVIDENCE_EXPECTED_HOST", "")
+# 전 영상 evidence 전용 Gate threshold (activity 의 GATE_THRESHOLD 를 재사용하지 않는다 — H2). 검증된
+# 0.10 을 기본/배포값으로 고정. worker 가 fail-closed 로 (0,1] 범위를 확인하고 아니면 실행을 거부한다.
+PYTHON_EVIDENCE_GATE_THRESHOLD = float(os.environ.get("PYTHON_EVIDENCE_GATE_THRESHOLD", "0.10"))
+# sparse Gate 최소 프레임. 미달이면 prelabel 을 저장하지 않고(불완전 프레임을 gecko absent 로 굳히지 않음)
+# terminal decode_insufficient_frames 로 처리한다(설계 §7.1).
+PYTHON_EVIDENCE_MIN_FRAMES = int(os.environ.get("PYTHON_EVIDENCE_MIN_FRAMES", "6"))
 
 # --- camera_clips 라벨링 격리 제안 worker — 기본은 완전 비활성/쓰기 금지 ---
 LABELING_TRIAGE_ENABLED = os.environ.get("LABELING_TRIAGE_ENABLED", "0") == "1"

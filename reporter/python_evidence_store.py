@@ -14,10 +14,20 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass
+import math
+from dataclasses import asdict, dataclass
 from datetime import datetime
 
+from gecko_vision_gate.motion_evidence import MotionMetrics
+from gecko_vision_gate.provenance import GateProvenance
+from gecko_vision_gate.schema import DetectedObject, PrelabelResult
 from gecko_vision_gate.temporal_evidence import EVIDENCE_SCHEMA_VERSION, TemporalEvidence, TemporalPoint
+
+# clip_prelabels 멱등 identity(activity_store 와 동일 7-column). evidence worker 가 fresh Gate 를
+# 돌렸을 때 이 identity 로 upsert → 같은 detector 설정 재실행은 무해, activity worker 가 재사용 가능.
+_PRELABEL_CONFLICT = (
+    "clip_id,model_version,schema_version,checkpoint_sha256,threshold,sampler_version,frames_sampled"
+)
 
 # DB CHECK 와 1:1 동기화(migrations/2026-07-17_python_evidence_universal_worker.sql). drift 나면 회귀.
 ALLOWED_STATUS = frozenset(
@@ -136,6 +146,49 @@ def fail_job(sb, *, job_id: str, failure_code: str, retryable: bool,
     })
 
 
+def store_prelabel(sb, *, clip_id: str, result: PrelabelResult, motion: MotionMetrics,
+                   provenance: GateProvenance, producer: ProducerInfo) -> dict:
+    """fresh Gate prelabel 을 clip_prelabels 에 멱등 저장(H2). activity_store 와 **동일 row 형태**
+    (7-column provenance + prelabel + motion_metrics)라 activity worker 가 재사용해도 깨지지 않는다.
+    assessment(활동 판정)는 쓰지 않는다 — Gate evidence 만. 저장 row(dict, id 포함) 반환."""
+    row = {
+        "clip_id": clip_id,
+        **provenance.to_dict(),
+        "gecko_visible": result.gecko_visible,
+        "visibility_confidence": result.visibility_confidence,
+        "best_frame_ts": result.best_frame_ts,
+        "gecko_bbox": result.gecko_bbox,
+        "detected_objects": [asdict(o) for o in result.detected_objects],
+        "motion_metrics": asdict(motion),
+        "producer_host": producer.host,
+        "producer_run_id": producer.run_id,
+    }
+    data = _safe_table(
+        sb, lambda: sb.table("clip_prelabels").upsert(row, on_conflict=_PRELABEL_CONFLICT).execute().data
+    )
+    if not data:
+        raise EvidenceStoreError("prelabel upsert returned no row")
+    return data[0]
+
+
+def prelabel_result_from_row(row: dict) -> PrelabelResult:
+    """clip_prelabels row → PrelabelResult (ROI bbox 용, motion_metrics 비의존). reused/fresh 공통."""
+    objs = tuple(
+        DetectedObject(o["type"], o["confidence"], o["bbox"], o["frame_ts"])
+        for o in (row.get("detected_objects") or [])
+    )
+    return PrelabelResult(
+        gecko_visible=row["gecko_visible"],
+        visibility_confidence=row["visibility_confidence"],
+        frames_sampled=row["frames_sampled"],
+        model_name=row["model_name"],
+        model_version=row["model_version"],
+        detected_objects=objs,
+        best_frame_ts=row.get("best_frame_ts"),
+        gecko_bbox=row.get("gecko_bbox"),
+    )
+
+
 def load_clip_r2_keys(sb, clip_ids) -> dict[str, str]:
     """claim 된 clip_id 들의 r2_key 를 keyed 조회(전량 scan 아님 — bounded in-list). r2_key 없으면 제외."""
     ids = list(clip_ids)
@@ -156,6 +209,27 @@ def _safe_table(sb, fn):
 def _serialize_series(points: tuple[TemporalPoint, ...]) -> list[dict]:
     """TemporalPoint tuple → jsonb 배열(각 점 {t,value}). point cap 은 이미 코어에서 bound."""
     return [{"t": p.t, "value": p.value} for p in points]
+
+
+def _num_ok(v) -> bool:
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v) and v >= 0
+
+
+def _validate_run_payload(p: dict) -> None:
+    """H4: JSON 계약을 Python 저장 경계에서 강제(DB CHECK 와 이중 방어). malformed 는 RPC 도달 전 거부."""
+    for k in ("metadata", "motion_summary", "spatial_dwell", "periodicity_summary"):
+        if not isinstance(p.get(k), dict):
+            raise EvidenceStoreError(f"{k} must be an object")
+    for k in ("global_motion_series", "roi_motion_series", "motion_excursions"):
+        v = p.get(k)
+        if not isinstance(v, list):
+            raise EvidenceStoreError(f"{k} must be an array")
+        if len(v) > 256:
+            raise EvidenceStoreError(f"{k} exceeds point cap 256")
+    for k in ("global_motion_series", "roi_motion_series"):
+        for e in p[k]:
+            if not (isinstance(e, dict) and _num_ok(e.get("t")) and _num_ok(e.get("value"))):
+                raise EvidenceStoreError(f"malformed series element in {k} (need t,value numeric finite >=0)")
 
 
 def insert_run(sb, *, job: EvidenceJob, temporal: TemporalEvidence,
@@ -191,5 +265,6 @@ def insert_run(sb, *, job: EvidenceJob, temporal: TemporalEvidence,
         "motion_excursions": list(temporal.motion_excursions),
         "source_prelabel_identity": source_prelabel_identity(prelabel),
     }
+    _validate_run_payload(payload)  # H4: malformed JSON 은 RPC 도달 전 거부
     row = _safe_rpc(sb, "fn_insert_python_evidence_run", {"p_run": payload})
     return row

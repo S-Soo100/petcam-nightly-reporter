@@ -29,14 +29,15 @@ from pathlib import Path
 from supabase import create_client
 
 from gecko_vision_gate.frame_sampling import sample_frames
+from gecko_vision_gate.motion_evidence import compute_motion_metrics
 from gecko_vision_gate.prelabel import prelabel_from_frames
-from gecko_vision_gate.provenance import SAMPLER_VERSION, SCHEMA_VERSION, checkpoint_sha256
+from gecko_vision_gate.provenance import SAMPLER_VERSION, SCHEMA_VERSION, GateProvenance, checkpoint_sha256
 from gecko_vision_gate.temporal_evidence import ALGORITHM_VERSION, compute_temporal_evidence
 
 from reporter import config, r2
-from reporter.activity_store import find_prelabel, reconstruct_evidence
+from reporter.activity_store import find_prelabel
 from reporter.gate_lock import acquire_common_gate_lock, release_common_gate_lock
-from reporter.gate_runner import load_detector, model_version_for
+from reporter.gate_runner import InsufficientSampleFrames, load_detector, model_version_for
 from reporter.python_evidence_store import (
     EvidenceStoreError,
     ProducerInfo,
@@ -46,6 +47,8 @@ from reporter.python_evidence_store import (
     fail_job,
     insert_run,
     load_clip_r2_keys,
+    prelabel_result_from_row,
+    store_prelabel,
 )
 from reporter.vlm_host_guard import HostOwnershipError, require_expected_host
 
@@ -66,30 +69,46 @@ class _JobFailure(Exception):
         super().__init__(code)
 
 
-def make_sparse_gate_runner(gate_config: dict, load_detector_fn=load_detector):
-    """sparse Gate prelabel(detector) 러너. detector 는 첫 호출에서 1회만 로드(배치 재사용)."""
+def make_sparse_gate_runner(gate_config: dict, *, min_frames: int, load_detector_fn=load_detector,
+                            sample_fn=sample_frames, prelabel_fn=prelabel_from_frames,
+                            motion_fn=compute_motion_metrics, store_fn=store_prelabel):
+    """sparse Gate prelabel 러너(H2). detector 첫 호출 1회 로드(배치 재사용). 반환 (result, prelabel_row).
+
+    흐름: 프레임 샘플 → **최소 프레임 검증**(미달이면 InsufficientSampleFrames, detector/저장 안 함 —
+    불완전 프레임을 gecko absent 로 굳히지 않음) → detector prelabel → motion → clip_prelabels 멱등 저장
+    → (result, 저장 row). 저장 row 를 temporal run 의 prelabel_id/provenance/identity 로 쓴다.
+    """
     state: dict = {"detector": None}
 
-    def run_gate(video_path: str, clip_id: str):
+    def run_gate(sb, video_path: str, clip_id: str, producer):
+        frames = sample_fn(video_path, gate_config["num_frames"])
+        if len(frames) < min_frames:
+            # detector 로드·추론·저장 이전에 중단 → 불완전 evidence 를 정상으로 굳히지 않는다(설계 §7.1).
+            raise InsufficientSampleFrames(found=len(frames), required=min_frames)
         if state["detector"] is None:
             state["detector"] = load_detector_fn(
                 gate_config["checkpoint_path"], gate_config["threshold"], gate_config["model_size"]
             )
-        frames = sample_frames(video_path, gate_config["num_frames"])
-        return prelabel_from_frames(
-            frames,
-            threshold=gate_config["threshold"],
-            model_size=gate_config["model_size"],
-            checkpoint=gate_config["checkpoint_path"],
-            clip_id=clip_id,
-            detector=state["detector"],
+        result = prelabel_fn(
+            frames, threshold=gate_config["threshold"], model_size=gate_config["model_size"],
+            checkpoint=gate_config["checkpoint_path"], clip_id=clip_id, detector=state["detector"],
         )
+        motion = motion_fn(frames, result)
+        provenance = GateProvenance(
+            model_name=result.model_name, model_version=result.model_version,
+            checkpoint_sha256=gate_config["checkpoint_sha256"], threshold=gate_config["threshold"],
+            sampler_version=gate_config["sampler_version"], schema_version=gate_config["schema_version"],
+            frames_sampled=result.frames_sampled,
+        )
+        row = store_fn(sb, clip_id=clip_id, result=result, motion=motion,
+                       provenance=provenance, producer=producer)
+        return result, row
 
     return run_gate
 
 
 def _process_one(sb, job, dest, clip_keys, *, gate_config, producer, worker_host,
-                 download_fn, find_prelabel_fn, reconstruct_fn, run_gate_fn, compute_fn,
+                 download_fn, find_prelabel_fn, result_from_row_fn, run_gate_fn, compute_fn,
                  insert_run_fn, complete_fn) -> str:
     """job 1건 처리. 성공 시 'ok'|'reused'|'stale' 반환, 실패는 _JobFailure raise."""
     r2_key = clip_keys.get(job.clip_id)
@@ -101,7 +120,7 @@ def _process_one(sb, job, dest, clip_keys, *, gate_config, producer, worker_host
     except Exception as e:  # noqa: BLE001 — R2 일시 오류는 정상(재시도 대상)
         raise _JobFailure("r2_download_failed", retryable=True) from e
 
-    # 기존 prelabel 재사용(detector 재호출 금지). clip_prelabels 는 read-only 로만 본다.
+    # 기존 prelabel 이 있으면 재사용(detector 재호출 금지). 없으면 fresh Gate 1회 + clip_prelabels 저장.
     try:
         prelabel_row = find_prelabel_fn(
             sb, job.clip_id, gate_config["model_version"], gate_config["schema_version"],
@@ -113,10 +132,15 @@ def _process_one(sb, job, dest, clip_keys, *, gate_config, producer, worker_host
 
     reused = prelabel_row is not None
     if reused:
-        result, _motion = reconstruct_fn(prelabel_row)
+        result = result_from_row_fn(prelabel_row)
     else:
         try:
-            result = run_gate_fn(str(dest), job.clip_id)  # detector 1회(lazy load)
+            result, prelabel_row = run_gate_fn(sb, str(dest), job.clip_id, producer)  # detector 1회 + 저장
+        except InsufficientSampleFrames as e:
+            # 최소 프레임 미달: prelabel 저장 안 함(gecko absent 로 굳히지 않음), terminal.
+            raise _JobFailure("decode_insufficient_frames", retryable=False) from e
+        except EvidenceStoreError as e:
+            raise _JobFailure("db_transient", retryable=True) from e  # prelabel 저장 실패 = 재시도
         except Exception as e:  # noqa: BLE001 — detector/모델 일시 오류는 재시도
             raise _JobFailure("detector_failed", retryable=True) from e
 
@@ -146,7 +170,7 @@ def _process_one(sb, job, dest, clip_keys, *, gate_config, producer, worker_host
 
 
 def process_jobs(sb, jobs, clip_keys, *, worker_host, producer, gate_config, now,
-                 download_fn, find_prelabel_fn, reconstruct_fn, run_gate_fn, compute_fn,
+                 download_fn, find_prelabel_fn, result_from_row_fn, run_gate_fn, compute_fn,
                  insert_run_fn, complete_fn, fail_fn) -> dict:
     """claim 된 job 들을 순차 처리. clip 별 오류 격리, temp media 0(TemporaryDirectory + 즉시 unlink)."""
     stats = {"jobs": len(jobs), "ok": 0, "reused": 0, "stale": 0, "failed": 0, "terminal": 0}
@@ -157,7 +181,7 @@ def process_jobs(sb, jobs, clip_keys, *, worker_host, producer, gate_config, now
                 outcome = _process_one(
                     sb, job, dest, clip_keys, gate_config=gate_config, producer=producer,
                     worker_host=worker_host, download_fn=download_fn, find_prelabel_fn=find_prelabel_fn,
-                    reconstruct_fn=reconstruct_fn, run_gate_fn=run_gate_fn, compute_fn=compute_fn,
+                    result_from_row_fn=result_from_row_fn, run_gate_fn=run_gate_fn, compute_fn=compute_fn,
                     insert_run_fn=insert_run_fn, complete_fn=complete_fn,
                 )
                 stats[outcome] += 1
@@ -209,7 +233,7 @@ def run(
     download_fn=None,
     compute_fn=compute_temporal_evidence,
     find_prelabel_fn=find_prelabel,
-    reconstruct_fn=reconstruct_evidence,
+    result_from_row_fn=prelabel_result_from_row,
     insert_run_fn=insert_run,
     complete_fn=complete_job,
     fail_fn=fail_job,
@@ -222,7 +246,12 @@ def run(
     if not config.PYTHON_EVIDENCE_ENABLED:
         print("[pyevidence] disabled (PYTHON_EVIDENCE_ENABLED=0) — skip", flush=True)
         return 0
-    # 2) fail-closed host guard (lock/DB/R2/detector 이전). installer 자동 승인 금지 → config 명시값.
+    # 2) fail-closed Gate threshold: 전용 PYTHON_EVIDENCE_GATE_THRESHOLD 가 (0,1] 이어야 실행(H2).
+    threshold = config.PYTHON_EVIDENCE_GATE_THRESHOLD
+    if not (isinstance(threshold, (int, float)) and 0.0 < threshold <= 1.0):
+        print(f"[pyevidence] invalid PYTHON_EVIDENCE_GATE_THRESHOLD={threshold!r} — fail-closed", flush=True)
+        return 2
+    # 3) fail-closed host guard (lock/DB/R2/detector 이전). installer 자동 승인 금지 → config 명시값.
     host = hostname_fn()
     expected = config.PYTHON_EVIDENCE_EXPECTED_HOST if expected_host is None else expected_host
     try:
@@ -230,7 +259,7 @@ def run(
     except HostOwnershipError as e:
         print(f"[pyevidence] host guard fail-closed: {e}", flush=True)
         return 2
-    # 3) 공통 Gate lock (detector 동시 실행 방지). loser 는 clean no-op.
+    # 4) 공통 Gate lock (detector 동시 실행 방지). loser 는 clean no-op.
     lock_fd = acquire_lock_fn()
     if lock_fd is None:
         print("[pyevidence] common gate lock busy — skip", flush=True)
@@ -245,7 +274,7 @@ def run(
         checkpoint = config.GATE_CHECKPOINT_PATH
         gate_config = {
             "checkpoint_path": checkpoint,
-            "threshold": config.GATE_THRESHOLD,
+            "threshold": threshold,  # H2: 전용 PYTHON_EVIDENCE_GATE_THRESHOLD (activity 와 분리)
             "num_frames": 12,
             "model_size": "nano",
             "model_version": model_version_fn(checkpoint),
@@ -254,14 +283,15 @@ def run(
             "schema_version": SCHEMA_VERSION,
         }
         download_fn = download_fn if download_fn is not None else r2.download_clip
-        run_gate_fn = make_gate_fn(gate_config, load_detector_fn)
+        run_gate_fn = make_gate_fn(gate_config, min_frames=config.PYTHON_EVIDENCE_MIN_FRAMES,
+                                   load_detector_fn=load_detector_fn)
         producer = ProducerInfo(
             host=host, run_id=f"{now:%Y%m%dT%H%M%S}", code_ref=f"python-evidence-worker/{ALGORITHM_VERSION}"
         )
         stats = process_jobs(
             sb, jobs, clip_keys, worker_host=host, producer=producer, gate_config=gate_config,
             now=now, download_fn=download_fn, find_prelabel_fn=find_prelabel_fn,
-            reconstruct_fn=reconstruct_fn, run_gate_fn=run_gate_fn, compute_fn=compute_fn,
+            result_from_row_fn=result_from_row_fn, run_gate_fn=run_gate_fn, compute_fn=compute_fn,
             insert_run_fn=insert_run_fn, complete_fn=complete_fn, fail_fn=fail_fn,
         )
         _log(now, stats, host)

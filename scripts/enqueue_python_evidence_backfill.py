@@ -51,7 +51,9 @@ def _fetch_clips(sb, start_date: date, end_date: date, limit: int, page_size: in
             .select("id, started_at")
             .gte("started_at", start.isoformat())
             .lt("started_at", end_excl.isoformat())
-            .order("started_at", "id")
+            # H5: supabase-py .order 는 컬럼 1개만 positional — 연속 호출로 (started_at, id) 안정 정렬.
+            .order("started_at")
+            .order("id")
             .range(offset, offset + take - 1)
             .execute()
             .data
@@ -63,9 +65,17 @@ def _fetch_clips(sb, start_date: date, end_date: date, limit: int, page_size: in
     return out[:limit]
 
 
+# 한 실행 안전 상한(폭주/실수 방지). 더 필요하면 여러 번 나눠 돌린다(stop/resume 가능).
+_LIMIT_SAFE_CAP = 5000
+
+
 def enqueue_backfill(sb, *, start_date: date, end_date: date, limit: int,
                      dry_run: bool, page_size: int = 1000) -> dict:
     """날짜 범위 clip 을 historical job 으로 enqueue(중복 no-op). dry-run 이면 mutation 0."""
+    if limit < 1 or limit > _LIMIT_SAFE_CAP:
+        raise ValueError(f"limit must be 1..{_LIMIT_SAFE_CAP} (got {limit})")
+    if end_date < start_date:
+        raise ValueError("end_date must be >= start_date")
     clips = _fetch_clips(sb, start_date, end_date, limit, page_size)
     if dry_run:
         return {"scanned": len(clips), "enqueued": 0, "dry_run": True}

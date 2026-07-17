@@ -206,3 +206,102 @@ def test_db_error_is_mapped_and_not_leaked():
         store.claim_jobs(sb, limit=30, worker_host="h", now=NOW)
     msg = str(ei.value)
     assert "hunter2" not in msg and "password" not in msg and "supabase.co" not in msg
+
+
+# ── H2: store_prelabel(clip_prelabels 멱등) + prelabel_result_from_row ──
+
+class _TableSB:
+    """clip_prelabels upsert 를 기록하는 fake."""
+
+    def __init__(self):
+        self.prelabels = []
+
+    def table(self, name):
+        assert name == "clip_prelabels"
+        return self
+
+    def upsert(self, row, on_conflict=None):
+        self._pending = (row, on_conflict)
+        return self
+
+    def execute(self):
+        row = dict(self._pending[0]); row.setdefault("id", f"pre-{len(self.prelabels)}")
+        self.prelabels.append((row, self._pending[1]))
+        return _RpcResult([row])
+
+
+def _gate_provenance():
+    from gecko_vision_gate.provenance import GateProvenance
+    return GateProvenance(model_name="rf-detr-nano", model_version="gecko_v2", checkpoint_sha256="abc",
+                          threshold=0.10, sampler_version="even-uniform-v1", schema_version="gate-evidence-v1",
+                          frames_sampled=12)
+
+
+def _prelabel_result_obj():
+    from gecko_vision_gate.schema import PrelabelResult
+    return PrelabelResult(gecko_visible=True, visibility_confidence=0.9, frames_sampled=12,
+                          model_name="rf-detr-nano", model_version="gecko_v2", gecko_bbox=[10, 10, 20, 20])
+
+
+def _motion_obj():
+    from gecko_vision_gate.motion_evidence import MotionMetrics
+    return MotionMetrics(2, 0.5, 0.1, 0.1, 0.9, 0.0, 0.0, False)
+
+
+def test_store_prelabel_idempotent_identity_and_row_shape():
+    sb = _TableSB()
+    row = store.store_prelabel(sb, clip_id="clip-1", result=_prelabel_result_obj(),
+                               motion=_motion_obj(), provenance=_gate_provenance(), producer=_producer())
+    stored_row, on_conflict = sb.prelabels[0]
+    # 7-column identity on_conflict (activity_store 와 동일)
+    assert on_conflict == store._PRELABEL_CONFLICT
+    assert "model_version" in stored_row and stored_row["threshold"] == 0.10
+    assert "motion_metrics" in stored_row  # activity 호환(reconstruct 가능)
+    assert "id" in row
+
+
+def test_prelabel_result_from_row_roundtrip():
+    row = {"gecko_visible": True, "visibility_confidence": 0.9, "frames_sampled": 12,
+           "model_name": "rf-detr-nano", "model_version": "gecko_v2", "gecko_bbox": [1, 2, 3, 4],
+           "detected_objects": [{"type": "gecko", "confidence": 0.9, "bbox": [1, 2, 3, 4], "frame_ts": 0.0}]}
+    res = store.prelabel_result_from_row(row)
+    assert res.gecko_visible is True and res.gecko_bbox == [1, 2, 3, 4]
+    assert res.detected_objects[0].type == "gecko"
+
+
+# ── H4: JSON 계약 Python 경계 검증 (malformed → RPC 도달 전 거부) ──
+
+def _job_for_insert():
+    return store.claim_jobs(RecSB({"fn_claim_python_evidence_jobs": [_job_row()]}),
+                            limit=1, worker_host="h", now=NOW)[0]
+
+
+def test_insert_run_rejects_negative_series_value():
+    sb = RecSB({"fn_insert_python_evidence_run": {"id": "run-x"}})
+    bad = TemporalEvidence(
+        evidence_schema_version="python-evidence-raw-v1", algorithm_version="croi-temporal-v1",
+        level0_status="ok", level1_status="no_bbox", decoded_frame_count=3, point_stride=1,
+        global_motion_series=(TemporalPoint(0.0, -1.0),), roi_motion_series=(),
+        motion_summary={}, spatial_dwell={}, periodicity_summary={}, motion_excursions=(),
+    )
+    with pytest.raises(store.EvidenceStoreError):
+        store.insert_run(sb, job=_job_for_insert(), temporal=bad, prelabel=None, producer=_producer())
+    assert sb.calls == []  # RPC 도달 전 거부
+
+
+def test_insert_run_rejects_oversized_series():
+    sb = RecSB({"fn_insert_python_evidence_run": {"id": "run-x"}})
+    big = TemporalEvidence(
+        evidence_schema_version="python-evidence-raw-v1", algorithm_version="croi-temporal-v1",
+        level0_status="ok", level1_status="no_bbox", decoded_frame_count=3, point_stride=1,
+        global_motion_series=tuple(TemporalPoint(float(i), 1.0) for i in range(257)),
+        roi_motion_series=(), motion_summary={}, spatial_dwell={}, periodicity_summary={}, motion_excursions=(),
+    )
+    with pytest.raises(store.EvidenceStoreError):
+        store.insert_run(sb, job=_job_for_insert(), temporal=big, prelabel=None, producer=_producer())
+
+
+def test_insert_run_accepts_valid_payload():
+    sb = RecSB({"fn_insert_python_evidence_run": {"id": "run-ok"}})
+    out = store.insert_run(sb, job=_job_for_insert(), temporal=_temporal(), prelabel=None, producer=_producer())
+    assert out == {"id": "run-ok"} and sb.calls  # 정상 payload 는 통과

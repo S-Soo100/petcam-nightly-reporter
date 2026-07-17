@@ -13,6 +13,8 @@ LABEL="com.petcam.python-evidence-worker"
 INTERVAL_SEC="${PYTHON_EVIDENCE_INTERVAL_SEC:-1800}"
 ENABLE="${PYTHON_EVIDENCE_ENABLED:-0}"
 EXPECTED_HOST="${PYTHON_EVIDENCE_EXPECTED_HOST:-}"
+# H2: evidence 전용 Gate threshold — 검증된 0.10 을 배포 기본값으로 plist 에 명시(activity 와 분리).
+GATE_THRESHOLD="${PYTHON_EVIDENCE_GATE_THRESHOLD:-0.10}"
 ACTUAL_HOST="$(hostname)"
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -53,6 +55,7 @@ cat > "$PLIST" <<PLISTEOF
         <key>PATH</key><string>$LAUNCHD_PATH</string>
         <key>PYTHON_EVIDENCE_ENABLED</key><string>$ENABLE</string>
         <key>PYTHON_EVIDENCE_EXPECTED_HOST</key><string>$EXPECTED_HOST</string>
+        <key>PYTHON_EVIDENCE_GATE_THRESHOLD</key><string>$GATE_THRESHOLD</string>
     </dict>
 </dict>
 </plist>

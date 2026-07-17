@@ -13,6 +13,7 @@ import pytest
 
 from reporter import python_evidence_worker as worker
 from reporter import gate_lock
+from reporter.gate_runner import InsufficientSampleFrames
 from reporter.python_evidence_store import EvidenceStoreError, EvidenceJob, ProducerInfo, StaleJobError
 from gecko_vision_gate.temporal_evidence import TemporalEvidence, TemporalPoint
 from gecko_vision_gate.schema import PrelabelResult
@@ -54,14 +55,16 @@ class Spies:
     """주입 가능한 IO 경계 spy 묶음. 기본은 성공 경로."""
 
     def __init__(self, *, prelabel_row=None, temporal=None, download_raises=False,
-                 gate_raises=False, compute_raises=False, complete_raises=None,
-                 insert_raises=False):
+                 gate_raises=False, gate_insufficient=False, compute_raises=False,
+                 complete_raises=None, insert_raises=False):
         self.calls = {"download": 0, "find": 0, "gate": 0, "compute": 0, "insert": 0,
                       "complete": 0, "fail": []}
+        self.insert_prelabels = []
         self._prelabel_row = prelabel_row
         self._temporal = temporal or _temporal()
         self._download_raises = download_raises
         self._gate_raises = gate_raises
+        self._gate_insufficient = gate_insufficient
         self._compute_raises = compute_raises
         self._complete_raises = complete_raises
         self._insert_raises = insert_raises
@@ -75,14 +78,16 @@ class Spies:
         self.calls["find"] += 1
         return self._prelabel_row
 
-    def reconstruct(self, row):
-        return _prelabel_result(), None
+    def result_from_row(self, row):
+        return _prelabel_result()
 
-    def run_gate(self, video_path, clip_id):
+    def run_gate(self, sb, video_path, clip_id, producer):
         self.calls["gate"] += 1
+        if self._gate_insufficient:
+            raise InsufficientSampleFrames(found=1, required=6)
         if self._gate_raises:
             raise RuntimeError("detector boom")
-        return _prelabel_result()
+        return _prelabel_result(), {"id": f"fresh-pre-{clip_id}"}
 
     def compute(self, video_path, result):
         self.calls["compute"] += 1
@@ -92,6 +97,7 @@ class Spies:
 
     def insert_run(self, sb, *, job, temporal, prelabel, producer):
         self.calls["insert"] += 1
+        self.insert_prelabels.append(prelabel)
         if self._insert_raises:
             raise EvidenceStoreError("db down")
         return {"id": f"run-{job.clip_id}"}
@@ -109,7 +115,7 @@ def _run_jobs(jobs, clip_keys, spies):
     return worker.process_jobs(
         sb=object(), jobs=jobs, clip_keys=clip_keys, worker_host="mac-mini", producer=PRODUCER,
         gate_config=GATE_CFG, now=NOW, download_fn=spies.download, find_prelabel_fn=spies.find_prelabel,
-        reconstruct_fn=spies.reconstruct, run_gate_fn=spies.run_gate, compute_fn=spies.compute,
+        result_from_row_fn=spies.result_from_row, run_gate_fn=spies.run_gate, compute_fn=spies.compute,
         insert_run_fn=spies.insert_run, complete_fn=spies.complete, fail_fn=spies.fail,
     )
 
@@ -304,7 +310,7 @@ def test_common_gate_lock_shares_activity_path():
     assert gate_lock.COMMON_GATE_LOCK_PATH == activity_worker._LOCK_PATH
 
 
-# ── no forbidden writes (selector/VLM/behavior/app) ──
+# ── no forbidden writes (selector/VLM/behavior/app) — clip_prelabels 는 Gate evidence 라 허용 ──
 
 def test_no_writes_to_forbidden_tables():
     from tests._fakes import FakeSB
@@ -313,9 +319,81 @@ def test_no_writes_to_forbidden_tables():
     worker.process_jobs(
         sb=sb, jobs=[_job()], clip_keys={"clip-1": "k1"}, worker_host="mac-mini", producer=PRODUCER,
         gate_config=GATE_CFG, now=NOW, download_fn=s.download, find_prelabel_fn=s.find_prelabel,
-        reconstruct_fn=s.reconstruct, run_gate_fn=s.run_gate, compute_fn=s.compute,
+        result_from_row_fn=s.result_from_row, run_gate_fn=s.run_gate, compute_fn=s.compute,
         insert_run_fn=s.insert_run, complete_fn=s.complete, fail_fn=s.fail,
     )
-    for forbidden in ("clip_prelabels", "clip_activity_assessments", "behavior_labels",
+    # clip_prelabels 는 Gate evidence 쓰기(fresh gate) — 금지 아님. 판정/앱/GT 계열만 금지.
+    for forbidden in ("clip_activity_assessments", "behavior_labels",
                       "behavior_logs", "clip_vlm_jobs", "camera_clips"):
         assert forbidden not in sb.store, f"worker wrote to forbidden table: {forbidden}"
+
+
+# ── H2: fresh Gate → prelabel 저장 + run 에 사용 / min-frame terminal / threshold fail-closed ──
+
+def test_fresh_gate_prelabel_used_in_run():
+    # prelabel 없음 → run_gate 가 (result, 저장 row) 반환 → insert_run 에 그 row 가 prelabel 로 전달
+    s = Spies(prelabel_row=None)
+    _run_jobs([_job()], {"clip-1": "k1"}, s)
+    assert s.calls["gate"] == 1
+    assert s.insert_prelabels == [{"id": "fresh-pre-clip-1"}]  # fresh prelabel row 사용
+
+
+def test_gate_insufficient_frames_terminal_no_store():
+    s = Spies(prelabel_row=None, gate_insufficient=True)
+    stats = _run_jobs([_job()], {"clip-1": "k1"}, s)
+    assert s.calls["fail"] == [("job-clip-1", "decode_insufficient_frames", False)]
+    assert s.calls["insert"] == 0  # prelabel 저장 안 함 + run 저장 안 함
+    assert stats["terminal"] == 1
+
+
+def test_make_sparse_gate_runner_persists_and_min_frames():
+    loads = {"n": 0}
+    stored = {"n": 0}
+
+    def load_det(*a):
+        loads["n"] += 1
+        return object()
+
+    def sample_ok(path, n):
+        return [(0.0, None)] * 8  # 충분한 프레임
+
+    def sample_few(path, n):
+        return [(0.0, None)] * 2  # min 미달
+
+    def prelabel(frames, **kw):
+        return _prelabel_result()
+
+    def motion(frames, result):
+        return object()
+
+    def store(sb, *, clip_id, result, motion, provenance, producer):
+        stored["n"] += 1
+        return {"id": f"pre-{clip_id}"}
+
+    cfg = dict(GATE_CFG)
+    rg = worker.make_sparse_gate_runner(cfg, min_frames=6, load_detector_fn=load_det,
+                                        sample_fn=sample_ok, prelabel_fn=prelabel,
+                                        motion_fn=motion, store_fn=store)
+    result, row = rg(object(), "v.mp4", "clip-1", PRODUCER)
+    assert row == {"id": "pre-clip-1"} and stored["n"] == 1 and loads["n"] == 1
+
+    # 최소 프레임 미달 → detector 로드·저장 없이 InsufficientSampleFrames
+    stored["n"] = 0
+    loads["n"] = 0
+    rg2 = worker.make_sparse_gate_runner(cfg, min_frames=6, load_detector_fn=load_det,
+                                         sample_fn=sample_few, prelabel_fn=prelabel,
+                                         motion_fn=motion, store_fn=store)
+    with pytest.raises(InsufficientSampleFrames):
+        rg2(object(), "v.mp4", "clip-1", PRODUCER)
+    assert stored["n"] == 0 and loads["n"] == 0  # gecko absent 로 굳히지 않음
+
+
+def test_run_invalid_threshold_fail_closed(monkeypatch):
+    monkeypatch.setattr(worker.config, "PYTHON_EVIDENCE_ENABLED", True)
+    monkeypatch.setattr(worker.config, "PYTHON_EVIDENCE_GATE_THRESHOLD", 0.0)  # 비정상
+    called = {"lock": 0}
+    rc = worker.run(sb=object(), now=NOW, hostname_fn=lambda: "mac-mini", expected_host="mac-mini",
+                    acquire_lock_fn=lambda: called.__setitem__("lock", called["lock"] + 1) or object(),
+                    release_lock_fn=lambda fd: None, claim_fn=lambda *a, **k: [])
+    assert rc == 2
+    assert called["lock"] == 0  # threshold fail-closed → lock 도 안 잡음

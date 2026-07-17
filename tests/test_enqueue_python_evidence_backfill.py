@@ -41,7 +41,7 @@ class _Query:
         self._name = name
         self._sb = sb
         self._filters = []
-        self._order = None
+        self._order = []
         self._range = None
         self._pending = None
         self._ignore = False
@@ -57,8 +57,9 @@ class _Query:
         self._filters.append(("lt", col, val))
         return self
 
-    def order(self, *cols, **_kw):
-        self._order = cols
+    def order(self, column, *, desc=False, nullsfirst=None, foreign_table=None):
+        # 실제 supabase-py 시그니처와 동일 — 컬럼 1개만 positional. 잘못된 2번째 positional 은 TypeError.
+        self._order.append(column)
         return self
 
     def range(self, lo, hi):
@@ -155,3 +156,33 @@ def test_enqueue_never_imports_r2_or_compute():
     src = inspect.getsource(bf)
     assert "download_clip" not in src and "compute_temporal_evidence" not in src
     assert "r2" not in src.replace("r2_key", "")  # r2_key 언급은 허용, r2 모듈 사용은 금지
+
+
+# ── H5: order 는 연속 호출(실제 SDK 시그니처) + 안정 pagination + limit 검증 ──
+
+def test_order_uses_chained_calls_not_second_positional():
+    # 실제 supabase-py order 는 컬럼 1개만 받는다. 잘못된 .order("a","b") 였다면 Fake 가 TypeError.
+    sb = FakeJobsSB(_clips(3))
+    bf.enqueue_backfill(sb, start_date=date(2026, 7, 10), end_date=date(2026, 7, 11),
+                        limit=10, dry_run=True)  # 조회만 — order 호출 경로 통과하면 성공
+
+
+def test_same_started_at_pagination_no_dup_or_miss():
+    # 같은 started_at 이 여러 페이지에 걸쳐도 (started_at,id) 안정정렬 + range offset 으로 누락·중복 0
+    clips = [{"id": f"clip-{i:03d}", "started_at": "2026-07-10T00:00:00+00:00"} for i in range(250)]
+    sb = FakeJobsSB(clips)
+    stats = bf.enqueue_backfill(sb, start_date=date(2026, 7, 10), end_date=date(2026, 7, 10),
+                                limit=250, dry_run=False, page_size=100)
+    assert stats["scanned"] == 250 and stats["enqueued"] == 250
+    ids = [j["clip_id"] for j in sb.jobs]
+    assert len(ids) == len(set(ids)) == 250  # 중복 0, 누락 0
+
+
+def test_limit_must_be_positive_and_bounded():
+    sb = FakeJobsSB(_clips(3))
+    with pytest.raises(ValueError):
+        bf.enqueue_backfill(sb, start_date=date(2026, 7, 10), end_date=date(2026, 7, 11),
+                            limit=0, dry_run=True)
+    with pytest.raises(ValueError):
+        bf.enqueue_backfill(sb, start_date=date(2026, 7, 10), end_date=date(2026, 7, 11),
+                            limit=10_000, dry_run=True)  # 안전 상한 초과

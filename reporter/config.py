@@ -67,6 +67,14 @@ ACTIVITY_BATCH_LIMIT = int(os.environ.get("ACTIVITY_BATCH_LIMIT", "200"))
 # installer 가 현재 hostname 을 자동 승인하지 못하도록 expected 는 배포자가 명시한 값을 쓴다.
 ACTIVITY_EXPECTED_HOST = os.environ.get("ACTIVITY_EXPECTED_HOST", "")
 
+# --- 전 영상 Python evidence worker (python_evidence_worker) — activity worker 와 완전 독립 ---
+# 기본 비활성(false): migration 없는 환경/미승인 host 에서 신규 table query 0 을 보장한다(설계 §11/§203).
+# enabled 여야 DB client 생성 전에도 통과. batch limit 은 [1,200] 로 clamp(폭주 방지). expected host 는
+# 검증된 Mac mini hostname 을 배포자가 명시해야 하며 현재 hostname 을 자동 승인하지 않는다(§196).
+PYTHON_EVIDENCE_ENABLED = os.environ.get("PYTHON_EVIDENCE_ENABLED", "0") == "1"
+PYTHON_EVIDENCE_BATCH_LIMIT = min(max(int(os.environ.get("PYTHON_EVIDENCE_BATCH_LIMIT", "30")), 1), 200)
+PYTHON_EVIDENCE_EXPECTED_HOST = os.environ.get("PYTHON_EVIDENCE_EXPECTED_HOST", "")
+
 # --- camera_clips 라벨링 격리 제안 worker — 기본은 완전 비활성/쓰기 금지 ---
 LABELING_TRIAGE_ENABLED = os.environ.get("LABELING_TRIAGE_ENABLED", "0") == "1"
 LABELING_TRIAGE_WRITE_ENABLED = os.environ.get("LABELING_TRIAGE_WRITE_ENABLED", "0") == "1"

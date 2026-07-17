@@ -136,6 +136,23 @@ def fail_job(sb, *, job_id: str, failure_code: str, retryable: bool,
     })
 
 
+def load_clip_r2_keys(sb, clip_ids) -> dict[str, str]:
+    """claim 된 clip_id 들의 r2_key 를 keyed 조회(전량 scan 아님 — bounded in-list). r2_key 없으면 제외."""
+    ids = list(clip_ids)
+    if not ids:
+        return {}
+    rows = _safe_table(sb, lambda: sb.table("motion_clips").select("id, r2_key").in_("id", ids).execute().data)
+    return {r["id"]: r["r2_key"] for r in (rows or []) if r.get("r2_key")}
+
+
+def _safe_table(sb, fn):
+    """table 조회 + 예외 위생(raw 원문 폐기)."""
+    try:
+        return fn()
+    except Exception as e:  # noqa: BLE001 — 위생
+        raise EvidenceStoreError(f"table query failed ({type(e).__name__})") from None
+
+
 def _serialize_series(points: tuple[TemporalPoint, ...]) -> list[dict]:
     """TemporalPoint tuple → jsonb 배열(각 점 {t,value}). point cap 은 이미 코어에서 bound."""
     return [{"t": p.t, "value": p.value} for p in points]

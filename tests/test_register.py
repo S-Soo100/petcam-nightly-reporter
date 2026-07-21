@@ -84,6 +84,7 @@ def test_should_register_filters_noninformative():
     assert register.should_register("shedding") is False  # b607290: 모프 흰체색 밤 IR 상시오탐 → skip 목록
     assert register.should_register("eating_paste") is True
     assert register.should_register("moving") is False   # 흔함
+    assert register.should_register("basking") is False  # 휴식 — 비정보성 자동 등록 제외
     assert register.should_register("error") is False     # 분류실패
     assert register.should_register("unseen") is False    # 게코 부재
     assert register.should_register("") is False          # 빈 라벨 방어

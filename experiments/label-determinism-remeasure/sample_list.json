@@ -1,0 +1,427 @@
+{
+  "frozen_at": "2026-07-21",
+  "description": "P1 label-determinism remeasure sample: shedding FP 32 (2026-07-08 세트) + drinking FP 후보 10 (2026-07-21 진단 §5-B). duration_sec = DB SELECT 실측 (motion_clips; 2건 camera_clips).",
+  "runs_per_clip": 3,
+  "samples": [
+    {
+      "clip_id": "09309a08-0751-42ab-adf6-293fa5fb524e",
+      "r2_key": "terra-clips/clips/p4cam-27b1f486/20260705-181352_09309a08-0751-42ab-adf6-293fa5fb524e.mp4",
+      "duration_sec": 32.6349754333496,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "human",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "12d105df-1fb0-4031-858a-b8c8630d4d2f",
+      "r2_key": "terra-clips/clips/p4cam-79b5d844/20260707-143656_12d105df-1fb0-4031-858a-b8c8630d4d2f.mp4",
+      "duration_sec": 30.8394012451172,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "labels",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "2780fa10-cfbb-46d0-b034-4ad8a007b738",
+      "r2_key": "terra-clips/clips/p4cam-79b5d844/20260707-150152_2780fa10-cfbb-46d0-b034-4ad8a007b738.mp4",
+      "duration_sec": 33.2353820800781,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "labels",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "2b619572-3b78-476f-9982-28aa5c677e6c",
+      "r2_key": "terra-clips/clips/p4cam-79b5d844/20260707-144058_2b619572-3b78-476f-9982-28aa5c677e6c.mp4",
+      "duration_sec": 31.4402732849121,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "labels",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "2f045137-538e-4dec-ab84-7c7bd9221667",
+      "r2_key": "terra-clips/clips/p4cam-27b1f486/20260705-174541_2f045137-538e-4dec-ab84-7c7bd9221667.mp4",
+      "duration_sec": 31.1953182220459,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "human",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "384af925-ab37-4c56-a46e-c7f9580bfb39",
+      "r2_key": "terra-clips/clips/p4cam-27b1f486/20260704-124940_384af925-ab37-4c56-a46e-c7f9580bfb39.mp4",
+      "duration_sec": 32.3976669311523,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "human",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "3a52b1fa-cada-42fb-8553-69934a32c858",
+      "r2_key": "terra-clips/clips/p4cam-27b1f486/20260703-193815_3a52b1fa-cada-42fb-8553-69934a32c858.mp4",
+      "duration_sec": 32.9947242736816,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "human",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "3c8001b8-0271-402e-8fd9-330ac6482dd7",
+      "r2_key": "terra-clips/clips/p4cam-79b5d844/20260703-145938_3c8001b8-0271-402e-8fd9-330ac6482dd7.mp4",
+      "duration_sec": 31.6803283691406,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "human",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "3e51c7ed-7138-4198-b026-8aa6a7465b83",
+      "r2_key": "clips/3a6cffbf-be83-4c77-9fa7-4fcc517c74a6/2026-04-29/052440_motion_3e51c7ed-7138-4198-b026-8aa6a7465b83.mp4",
+      "duration_sec": 60.0593,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "human",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "43d9daba-1811-454c-87c6-a2e627ae77cb",
+      "r2_key": "terra-clips/clips/p4cam-27b1f486/20260704-120724_43d9daba-1811-454c-87c6-a2e627ae77cb.mp4",
+      "duration_sec": 32.6372718811035,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "human",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "68c8c236-d6cc-4ddb-a769-940b06fa75c7",
+      "r2_key": "terra-clips/clips/p4cam-79b5d844/20260707-133620_68c8c236-d6cc-4ddb-a769-940b06fa75c7.mp4",
+      "duration_sec": 31.2006282806396,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "labels",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "696e0e44-efe5-4eb9-9372-8e43e246f9a3",
+      "r2_key": "terra-clips/clips/p4cam-79b5d844/20260707-150252_696e0e44-efe5-4eb9-9372-8e43e246f9a3.mp4",
+      "duration_sec": 31.3210582733154,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "labels",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "745c11bb-d9d3-45d0-8b54-b6d1bb41fabc",
+      "r2_key": "terra-clips/clips/p4cam-27b1f486/20260705-162536_745c11bb-d9d3-45d0-8b54-b6d1bb41fabc.mp4",
+      "duration_sec": 33.1214981079102,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "labels",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "748c1b7d-b634-4793-a9bc-cdf87bee350e",
+      "r2_key": "terra-clips/clips/p4cam-79b5d844/20260707-143958_748c1b7d-b634-4793-a9bc-cdf87bee350e.mp4",
+      "duration_sec": 33.2377815246582,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "labels",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "75f784f3-9e21-49cf-acb1-879a9e243d99",
+      "r2_key": "terra-clips/clips/p4cam-27b1f486/20260704-122531_75f784f3-9e21-49cf-acb1-879a9e243d99.mp4",
+      "duration_sec": 31.4346714019775,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "human",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "7b3e66f7-d967-478d-a049-bf9e12880295",
+      "r2_key": "terra-clips/clips/p4cam-79b5d844/20260703-150038_7b3e66f7-d967-478d-a049-bf9e12880295.mp4",
+      "duration_sec": 33.4973907470703,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "human",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "84ca0e44-4a65-4213-898e-c20f7ebe2777",
+      "r2_key": "terra-clips/clips/p4cam-27b1f486/20260703-184424_84ca0e44-4a65-4213-898e-c20f7ebe2777.mp4",
+      "duration_sec": 30.9527187347412,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "human",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "88c41a95-b1e8-445a-8b61-02b6c53956bb",
+      "r2_key": "terra-clips/clips/p4cam-27b1f486/20260705-172704_88c41a95-b1e8-445a-8b61-02b6c53956bb.mp4",
+      "duration_sec": 31.432315826416,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "human",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "922a1cba-5898-418b-85bd-5c76cd00d778",
+      "r2_key": "clips/3a6cffbf-be83-4c77-9fa7-4fcc517c74a6/2026-04-29/052739_motion_922a1cba-5898-418b-85bd-5c76cd00d778.mp4",
+      "duration_sec": 60.0042,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "human",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "9789c34f-e4a3-4d19-b28e-e25baa9a54c1",
+      "r2_key": "terra-clips/clips/p4cam-27b1f486/20260705-173053_9789c34f-e4a3-4d19-b28e-e25baa9a54c1.mp4",
+      "duration_sec": 30.4808444976807,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "human",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "9cc31d6f-dfc1-4d37-b592-3ac43f5b9758",
+      "r2_key": "terra-clips/clips/p4cam-27b1f486/20260704-114452_9cc31d6f-dfc1-4d37-b592-3ac43f5b9758.mp4",
+      "duration_sec": 33.7120971679688,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "human",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "9e6b6a69-5031-4aa2-b0ad-ae3ad7228100",
+      "r2_key": "terra-clips/clips/p4cam-27b1f486/20260703-172834_9e6b6a69-5031-4aa2-b0ad-ae3ad7228100.mp4",
+      "duration_sec": 33.2325439453125,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "human",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "b02ab63e-13bf-4570-80b3-2bb73ce4ee7c",
+      "r2_key": "terra-clips/clips/p4cam-27b1f486/20260705-200944_b02ab63e-13bf-4570-80b3-2bb73ce4ee7c.mp4",
+      "duration_sec": 30.2347221374512,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "human",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "bfb7156c-dc5a-4ea0-b30f-ca8ecdf337d2",
+      "r2_key": "terra-clips/clips/p4cam-79b5d844/20260707-143354_bfb7156c-dc5a-4ea0-b30f-ca8ecdf337d2.mp4",
+      "duration_sec": 32.5213317871094,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "labels",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "c8dd5dbd-0d73-4d8b-8ba5-13471757a6ab",
+      "r2_key": "terra-clips/clips/p4cam-27b1f486/20260704-114221_c8dd5dbd-0d73-4d8b-8ba5-13471757a6ab.mp4",
+      "duration_sec": 32.0475616455078,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "human",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "ddc4eb01-486d-43cb-ade5-b2af2b52d31c",
+      "r2_key": "terra-clips/clips/p4cam-79b5d844/20260707-143757_ddc4eb01-486d-43cb-ade5-b2af2b52d31c.mp4",
+      "duration_sec": 33.234619140625,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "labels",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "dfb3d43e-25f0-4c01-933c-7ab4448b9f48",
+      "r2_key": "terra-clips/clips/p4cam-27b1f486/20260704-115431_dfb3d43e-25f0-4c01-933c-7ab4448b9f48.mp4",
+      "duration_sec": 32.2781257629395,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "human",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "e5e24602-c448-4c05-905a-9301ed046a89",
+      "r2_key": "terra-clips/clips/p4cam-79b5d844/20260707-165555_e5e24602-c448-4c05-905a-9301ed046a89.mp4",
+      "duration_sec": 33.2396926879883,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "human",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "e5e75a3e-e709-4df0-bdf0-0fad161e2913",
+      "r2_key": "terra-clips/clips/p4cam-27b1f486/20260703-175644_e5e75a3e-e709-4df0-bdf0-0fad161e2913.mp4",
+      "duration_sec": 33.7192268371582,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "human",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "e5edf886-22b1-47ce-8684-c57b762439b0",
+      "r2_key": "terra-clips/clips/p4cam-79b5d844/20260707-143455_e5edf886-22b1-47ce-8684-c57b762439b0.mp4",
+      "duration_sec": 30.7214202880859,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "labels",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "fb0328cb-d37b-41aa-8613-218de449801b",
+      "r2_key": "terra-clips/clips/p4cam-79b5d844/20260703-183313_fb0328cb-d37b-41aa-8613-218de449801b.mp4",
+      "duration_sec": 31.6809272766113,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "human",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "fb59b152-37bc-4014-92e5-a7c98fed737a",
+      "r2_key": "terra-clips/clips/p4cam-27b1f486/20260705-194155_fb59b152-37bc-4014-92e5-a7c98fed737a.mp4",
+      "duration_sec": 30.9536190032959,
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "gt_store": "human",
+      "origin": "petcam-lab experiments/v41-shedding-ir-guard/sample_list_fp.json"
+    },
+    {
+      "clip_id": "135c6248-7205-4ccc-b2cf-3bf62e7cc8b1",
+      "r2_key": "terra-clips/clips/p4cam-79b5d844/20260706-204928_135c6248-7205-4ccc-b2cf-3bf62e7cc8b1.mp4",
+      "duration_sec": 31.4632225036621,
+      "set": "drinking_fp",
+      "fp_label": "drinking",
+      "gt": null,
+      "gt_store": null,
+      "origin": "behavior_logs source=vlm claude-sonnet-4-6, motion-backfill B_sat v4.0"
+    },
+    {
+      "clip_id": "25ee99b0-dec6-472a-b0bb-b78fa4c5eafd",
+      "r2_key": "terra-clips/clips/p4cam-79b5d844/20260707-133416_25ee99b0-dec6-472a-b0bb-b78fa4c5eafd.mp4",
+      "duration_sec": 32.0381622314453,
+      "set": "drinking_fp",
+      "fp_label": "drinking",
+      "gt": null,
+      "gt_store": null,
+      "origin": "behavior_logs source=vlm claude-sonnet-4-6, nightly-board auto"
+    },
+    {
+      "clip_id": "29a74166-1024-4bdd-a497-b1133a86549b",
+      "r2_key": "terra-clips/clips/p4cam-79b5d844/20260707-201129_29a74166-1024-4bdd-a497-b1133a86549b.mp4",
+      "duration_sec": 31.9183864593506,
+      "set": "drinking_fp",
+      "fp_label": "drinking",
+      "gt": null,
+      "gt_store": null,
+      "origin": "behavior_logs source=vlm claude-sonnet-4-6, nightly-board auto"
+    },
+    {
+      "clip_id": "3db14864-cc42-4a8e-b077-ba249d3cfdc4",
+      "r2_key": "terra-clips/clips/p4cam-79b5d844/20260706-185748_3db14864-cc42-4a8e-b077-ba249d3cfdc4.mp4",
+      "duration_sec": 32.5215148925781,
+      "set": "drinking_fp",
+      "fp_label": "drinking",
+      "gt": null,
+      "gt_store": null,
+      "origin": "behavior_logs source=vlm claude-sonnet-4-6, motion-backfill B_sat v4.0"
+    },
+    {
+      "clip_id": "439e1798-a7fc-4368-8dda-835fb5a6b51a",
+      "r2_key": "terra-clips/clips/p4cam-27b1f486/20260705-182457_439e1798-a7fc-4368-8dda-835fb5a6b51a.mp4",
+      "duration_sec": 30.8332042694092,
+      "set": "drinking_fp",
+      "fp_label": "drinking",
+      "gt": null,
+      "gt_store": null,
+      "origin": "behavior_logs source=vlm claude-sonnet-4-6, motion-backfill B_sat v4.0"
+    },
+    {
+      "clip_id": "6c16a62b-f572-4008-84dc-b6c700777ada",
+      "r2_key": "terra-clips/clips/p4cam-79b5d844/20260716-134428_6c16a62b-f572-4008-84dc-b6c700777ada.mp4",
+      "duration_sec": 30.6024360656738,
+      "set": "drinking_fp",
+      "fp_label": "drinking",
+      "gt": "moving",
+      "gt_store": "audit-20260719",
+      "origin": "clip_vlm_jobs claude_cli_batch (backfill), 07-19 감사 GT=moving 확정"
+    },
+    {
+      "clip_id": "a57ce7cd-77cb-473a-b935-191111186acd",
+      "r2_key": "terra-clips/clips/p4cam-79b5d844/20260707-190249_a57ce7cd-77cb-473a-b935-191111186acd.mp4",
+      "duration_sec": 30.5965766906738,
+      "set": "drinking_fp",
+      "fp_label": "drinking",
+      "gt": null,
+      "gt_store": null,
+      "origin": "behavior_logs source=vlm claude-sonnet-4-6, nightly-board auto"
+    },
+    {
+      "clip_id": "ad4bd25e-0d38-4464-9923-b22bf952a870",
+      "r2_key": "terra-clips/clips/p4cam-79b5d844/20260706-204042_ad4bd25e-0d38-4464-9923-b22bf952a870.mp4",
+      "duration_sec": 33.0038833618164,
+      "set": "drinking_fp",
+      "fp_label": "drinking",
+      "gt": null,
+      "gt_store": null,
+      "origin": "behavior_logs source=vlm claude-sonnet-4-6, motion-backfill B_sat v4.0"
+    },
+    {
+      "clip_id": "b0171f2d-329d-43b7-8cbb-b742065ad1b6",
+      "r2_key": "terra-clips/clips/p4cam-79b5d844/20260716-134058_b0171f2d-329d-43b7-8cbb-b742065ad1b6.mp4",
+      "duration_sec": 31.6828632354736,
+      "set": "drinking_fp",
+      "fp_label": "drinking",
+      "gt": "moving",
+      "gt_store": "audit-20260719",
+      "origin": "clip_vlm_jobs claude_cli_batch (backfill), 07-19 감사 GT=moving 확정"
+    },
+    {
+      "clip_id": "e679f8ad-9011-4bc2-a489-1bb93c54ead8",
+      "r2_key": "terra-clips/clips/p4cam-79b5d844/20260707-134031_e679f8ad-9011-4bc2-a489-1bb93c54ead8.mp4",
+      "duration_sec": 31.7998542785645,
+      "set": "drinking_fp",
+      "fp_label": "drinking",
+      "gt": null,
+      "gt_store": null,
+      "origin": "behavior_logs source=vlm claude-sonnet-4-6, nightly-board auto"
+    }
+  ]
+}

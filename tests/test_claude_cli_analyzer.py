@@ -44,6 +44,26 @@ def _envelope(items, model="claude-sonnet-5", is_error=False):
     }
 
 
+def test_cli_batch_accepts_basking_result(tmp_path):
+    items = [
+        {"clip_id": "c1", "action": "basking", "confidence": 0.91,
+         "reasoning": "The torso stays in place while the head scans."},
+        {"clip_id": "c2", "action": "moving", "confidence": 0.88,
+         "reasoning": "The torso changes position."},
+    ]
+
+    def runner(*_args, **_kwargs):
+        return SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(_envelope(items)),
+            stderr="",
+        )
+
+    result = analyze_batch(_frames(tmp_path), "claude-sonnet-5", runner=runner)
+    assert result.results["c1"]["action"] == "basking"
+    assert result.results["c2"]["action"] == "moving"
+
+
 def test_cli_batch_uses_exact_model_and_read_only_command(tmp_path):
     calls = []
 

@@ -1,0 +1,2020 @@
+{
+  "clips": {
+    "09309a08-0751-42ab-adf6-293fa5fb524e": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "Gecko mostly out of view; in the final frames its head/eye appears and shifts position with no visible food, water, or shedding evidence, consistent with general movement.",
+          "session_id": "decb6f77-d243-45b5-bb69-041bcb506f03",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 17635,
+            "cache_read_input_tokens": 30243,
+            "output_tokens": 1043
+          },
+          "cost_usd_estimated": 0.2175765
+        },
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "Gecko's head/eye and a limb become visible only in the final frames, showing body movement with no food, prey, or anchored licking posture observable.",
+          "session_id": "a49d0bee-22e5-48e8-9809-0f1f5d7e30fa",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13116,
+            "cache_read_input_tokens": 34764,
+            "output_tokens": 1059
+          },
+          "cost_usd_estimated": 0.175047
+        },
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "Gecko is mostly obscured by decor/hide, briefly showing its head then body shifting position with no visible food dish, prey, or anchored licking behavior.",
+          "session_id": "122e9cf3-e9f3-40f1-b7a5-bee7f74020b6",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4696,
+            "cache_read_input_tokens": 43172,
+            "output_tokens": 1036
+          },
+          "cost_usd_estimated": 0.094476
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "12d105df-1fb0-4031-858a-b8c8630d4d2f": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "moving",
+          "confidence": 0.45,
+          "reasoning": "Gecko rests nearly motionless on cork tube across all frames with pale/whitish patches on its body but no visible active skin removal, food, or anchored repeated licking, so it defaults to moving.",
+          "session_id": "5ba46b35-37f9-408d-845e-f25d91f09f86",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13229,
+            "cache_read_input_tokens": 34811,
+            "output_tokens": 1171
+          },
+          "cost_usd_estimated": 0.1790005
+        },
+        {
+          "label": "moving",
+          "confidence": 0.5,
+          "reasoning": "Gecko remains nearly stationary on the cork branch across all frames with no visible food dish, prey, water-licking posture, or active skin removal, so default to moving.",
+          "session_id": "bb32cd69-f90d-4538-97a1-30aeb6fc004c",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4728,
+            "cache_read_input_tokens": 43227,
+            "output_tokens": 1081
+          },
+          "cost_usd_estimated": 0.0959485
+        },
+        {
+          "label": "moving",
+          "confidence": 0.4,
+          "reasoning": "Gecko remains largely stationary on the cork branch across all frames with pale skin patches visible, but no clear active skin-pulling, feeding, or drinking action is observed, so default classification applies.",
+          "session_id": "7210e02e-c28c-4bd3-92ed-8566fb02537c",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4828,
+            "cache_read_input_tokens": 43239,
+            "output_tokens": 1210
+          },
+          "cost_usd_estimated": 0.1001795
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "2780fa10-cfbb-46d0-b034-4ad8a007b738": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "The gecko remains clinging to the branch with only slight positional shifts across frames and no visible food, water, or shedding skin evidence, so it defaults to general low-activity movement.",
+          "session_id": "fdcca1a2-a9c3-45ab-9673-67211f674d55",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13173,
+            "cache_read_input_tokens": 34814,
+            "output_tokens": 1109
+          },
+          "cost_usd_estimated": 0.176892
+        },
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "Gecko remains gripping the cork branch across all frames with only slight positional shifts; no food, water, or active skin-removal action is visible in the frame.",
+          "session_id": "fabe920c-9143-4169-a940-3fc6e56b438f",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4762,
+            "cache_read_input_tokens": 43234,
+            "output_tokens": 1110
+          },
+          "cost_usd_estimated": 0.097017
+        },
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "Gecko clings to the cork branch in nearly the same position across all frames with no visible food, prey, water-licking posture, or skin-removal action, so it defaults to moving/resting.",
+          "session_id": "82aebb14-2822-48d9-a2a9-41c18b67bc78",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4717,
+            "cache_read_input_tokens": 43230,
+            "output_tokens": 997
+          },
+          "cost_usd_estimated": 0.09373999999999999
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "2b619572-3b78-476f-9982-28aa5c677e6c": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "게코가 코르크 나무 위에서 위치를 조금씩 바꾸며 머리를 다른 방향으로 돌리는 모습만 관찰되며, 먹이통이나 물, 뜯긴 허물 등 특정 행동의 명확한 증거는 보이지 않는다.",
+          "session_id": "15b0896f-a978-4207-b173-7147d85e4572",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13115,
+            "cache_read_input_tokens": 34771,
+            "output_tokens": 1109
+          },
+          "cost_usd_estimated": 0.17629050000000002
+        },
+        {
+          "label": "drinking",
+          "confidence": 0.55,
+          "reasoning": "게코가 코르크 나뭇가지의 한 지점에 몸을 고정한 채 머리만 반복적으로 움직이며 표면을 핥는 자세를 6프레임 내내 유지하고 있어 물이 보이지 않아도 정착 반복 핥기 패턴에 해당한다.",
+          "session_id": "2b09c05b-fafc-4105-8d20-c84927057605",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 5008,
+            "cache_read_input_tokens": 43180,
+            "output_tokens": 1414
+          },
+          "cost_usd_estimated": 0.10705
+        },
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "Gecko stays perched on the cork branch with only slight head/body shifts across frames; no food dish, prey, or active skin-removal action is visible.",
+          "session_id": "b3d72ae0-0e88-471c-a3ea-a7f5f28ce07c",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 263,
+            "cache_read_input_tokens": 47670,
+            "output_tokens": 1101
+          },
+          "cost_usd_estimated": 0.054020000000000006
+        }
+      ],
+      "unanimous": false,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "2f045137-538e-4dec-ab84-7c7bd9221667": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "moving",
+          "confidence": 0.4,
+          "reasoning": "The gecko remains in essentially the same curled position across all frames with no visible food dish, prey, water-licking posture, or active skin removal, so it defaults to general/minimal movement.",
+          "session_id": "dc771fe8-878c-4a69-b35b-ed80a3d5b0a5",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13203,
+            "cache_read_input_tokens": 34771,
+            "output_tokens": 1152
+          },
+          "cost_usd_estimated": 0.1782455
+        },
+        {
+          "label": "moving",
+          "confidence": 0.45,
+          "reasoning": "게코가 거의 동일한 자세로 정지해 있고 급이통, 먹이, 물, 탈피 제거 행동이 명확히 관찰되지 않아 기본 분류인 이동/정지 상태로 판단.",
+          "session_id": "c5c6d25c-773b-419b-935d-6e28158d7100",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4829,
+            "cache_read_input_tokens": 43171,
+            "output_tokens": 1208
+          },
+          "cost_usd_estimated": 0.1001055
+        },
+        {
+          "label": "moving",
+          "confidence": 0.4,
+          "reasoning": "Gecko remains in nearly identical curled posture across all frames with no visible dish, prey, water, or active skin-removal action, so it defaults to general/minimal movement.",
+          "session_id": "da15bbbe-3ed5-4149-9684-aa59e38cdf39",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4771,
+            "cache_read_input_tokens": 43173,
+            "output_tokens": 1127
+          },
+          "cost_usd_estimated": 0.09750149999999999
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "384af925-ab37-4c56-a46e-c7f9580bfb39": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "moving",
+          "confidence": 0.4,
+          "reasoning": "Gecko briefly visible on branch only in the first frame with body/limb positioning suggesting movement, then leaves frame for the remaining clip with no visible skin-removal action or food source.",
+          "session_id": "bd88608e-78b4-4380-8125-2c0d32acd234",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13269,
+            "cache_read_input_tokens": 34796,
+            "output_tokens": 1216
+          },
+          "cost_usd_estimated": 0.180518
+        },
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "게코 몸통/다리가 f_001에서만 잠깐 보이고 이후 프레임에서는 나뭇가지와 잎만 보여 게코가 프레임 밖으로 이동한 것으로 보이며, 먹이 섭취나 탈피 행동의 증거는 없음.",
+          "session_id": "3960f03f-048d-4651-92f0-6215202d3eb4",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4888,
+            "cache_read_input_tokens": 43206,
+            "output_tokens": 1169
+          },
+          "cost_usd_estimated": 0.099738
+        },
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "Gecko briefly visible on branch in frame 1 with some pale skin patches but no clear active skin-removal action, then leaves frame in subsequent images with no other identifiable behavior.",
+          "session_id": "eecaf3b6-f279-4e3c-8029-2399a9f5dcc2",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4819,
+            "cache_read_input_tokens": 43206,
+            "output_tokens": 1180
+          },
+          "cost_usd_estimated": 0.099323
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "3a52b1fa-cada-42fb-8553-69934a32c858": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "unseen",
+          "confidence": 0.55,
+          "reasoning": "Only a static, partially visible gecko foot/toes is seen in all six frames with no discernible movement, food, or water, so no specific behavior can be confidently identified.",
+          "session_id": "39ae75a2-503a-4c59-a44a-343c07491750",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13445,
+            "cache_read_input_tokens": 34762,
+            "output_tokens": 1366
+          },
+          "cost_usd_estimated": 0.186011
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.85,
+          "reasoning": "All six frames show only static enclosure clutter (bottle, shelf edge, white object) with no identifiable gecko body or movement across the clip.",
+          "session_id": "1a76855d-7b69-4f34-821e-2d4e6d6cec5c",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4720,
+            "cache_read_input_tokens": 43172,
+            "output_tokens": 1026
+          },
+          "cost_usd_estimated": 0.09446600000000001
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.6,
+          "reasoning": "All six frames show the same static, unidentifiable textured surface with a paper/plastic obstruction in the foreground; no gecko body part or movement can be clearly identified.",
+          "session_id": "1fc00f11-ba30-46e3-ac70-aea752ebabae",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4781,
+            "cache_read_input_tokens": 43173,
+            "output_tokens": 1136
+          },
+          "cost_usd_estimated": 0.0978265
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "3c8001b8-0271-402e-8fd9-330ac6482dd7": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "unseen",
+          "confidence": 0.85,
+          "reasoning": "All six frames show an empty enclosure with a wooden branch and decor; no gecko is visible in any frame.",
+          "session_id": "1eaeedd1-e131-4351-8d27-6241c302771b",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13080,
+            "cache_read_input_tokens": 34793,
+            "output_tokens": 960
+          },
+          "cost_usd_estimated": 0.1722265
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.85,
+          "reasoning": "All six frames show only the enclosure furnishings (branch, foliage, hide) with no identifiable gecko body visible throughout the clip.",
+          "session_id": "2bead18c-2379-4076-83df-ef48083021d9",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 177,
+            "cache_read_input_tokens": 47700,
+            "output_tokens": 963
+          },
+          "cost_usd_estimated": 0.049725000000000005
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.85,
+          "reasoning": "All six frames show only the empty enclosure (branch, hide, plant) with no gecko visible or identifiable throughout the clip.",
+          "session_id": "9b5fbcdd-779c-4756-8797-8be86c692001",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 178,
+            "cache_read_input_tokens": 47700,
+            "output_tokens": 1006
+          },
+          "cost_usd_estimated": 0.05081
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "3e51c7ed-7138-4198-b026-8aa6a7465b83": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "drinking",
+          "confidence": 0.75,
+          "reasoning": "Gecko climbs onto and stays anchored at a fixed glass dish across multiple frames, repeatedly lowering its head to lick the surface, matching the body-anchored repeated-licking drinking posture.",
+          "session_id": "03adb957-baa4-4b79-a8a2-d7f9763ed02a",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 12417,
+            "cache_read_input_tokens": 33971,
+            "output_tokens": 1203
+          },
+          "cost_usd_estimated": 0.1712605
+        },
+        {
+          "label": "drinking",
+          "confidence": 0.55,
+          "reasoning": "Gecko climbs onto the dish rim and holds its head fixed at that spot across multiple frames before moving away, consistent with anchored repeated licking at the water dish rather than general locomotion.",
+          "session_id": "dd458db5-2acc-4feb-bebd-ad4ace62d2b3",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 3892,
+            "cache_read_input_tokens": 42385,
+            "output_tokens": 1009
+          },
+          "cost_usd_estimated": 0.08536749999999999
+        },
+        {
+          "label": "drinking",
+          "confidence": 0.55,
+          "reasoning": "Gecko anchors on the hide and repeatedly reaches its head toward the fixed rim of the glass container across several consecutive frames, consistent with body-anchored repeated licking rather than general locomotion.",
+          "session_id": "f94e936f-f86b-4969-ad67-edae4755d873",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 3929,
+            "cache_read_input_tokens": 42386,
+            "output_tokens": 1137
+          },
+          "cost_usd_estimated": 0.088938
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "43d9daba-1811-454c-87c6-a2e627ae77cb": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "unseen",
+          "confidence": 0.75,
+          "reasoning": "All frames are dominated by an overexposed white glare and static rocky/branch texture with no identifiable gecko body or movement visible.",
+          "session_id": "bb242571-08af-4d19-91b7-49e87a16d262",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13129,
+            "cache_read_input_tokens": 34784,
+            "output_tokens": 989
+          },
+          "cost_usd_estimated": 0.173437
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.85,
+          "reasoning": "All six frames show an overexposed IR light glare and dark enclosure surfaces with no identifiable gecko body or movement visible.",
+          "session_id": "3b71d864-4092-4418-b170-76c7ecee9e6d",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 200,
+            "cache_read_input_tokens": 47689,
+            "output_tokens": 999
+          },
+          "cost_usd_estimated": 0.05084949999999999
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.75,
+          "reasoning": "All frames show an overexposed white glare and dark background/rock texture with no identifiable gecko body or movement.",
+          "session_id": "f124bf81-1a38-471b-8135-65b7a9cdec6c",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 187,
+            "cache_read_input_tokens": 47689,
+            "output_tokens": 954
+          },
+          "cost_usd_estimated": 0.0495945
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "68c8c236-d6cc-4ddb-a769-940b06fa75c7": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "unseen",
+          "confidence": 0.85,
+          "reasoning": "No gecko body is identifiable in any of the six frames; only enclosure decor and equipment are visible.",
+          "session_id": "3548b09b-0b85-49b7-870a-4551255b07f6",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13105,
+            "cache_read_input_tokens": 34824,
+            "output_tokens": 1010
+          },
+          "cost_usd_estimated": 0.173742
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.85,
+          "reasoning": "No gecko or identifiable body part is visible in any of the six frames; only enclosure decor and equipment are shown.",
+          "session_id": "f17d96c3-afc3-43ee-84c6-ae604ea8e1bd",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 177,
+            "cache_read_input_tokens": 47755,
+            "output_tokens": 978
+          },
+          "cost_usd_estimated": 0.0501275
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.85,
+          "reasoning": "All six frames show the empty enclosure interior with no gecko body visible anywhere in the frame.",
+          "session_id": "249469c6-63ed-484c-a3aa-05b09354f331",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 164,
+            "cache_read_input_tokens": 47755,
+            "output_tokens": 969
+          },
+          "cost_usd_estimated": 0.0497725
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "696e0e44-efe5-4eb9-9372-8e43e246f9a3": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "Gecko remains in nearly the same resting position on the cork branch across all frames with no visible food, water, or skin-shedding evidence, so it defaults to general/no-specialized-behavior classification.",
+          "session_id": "92f31218-78e9-493a-9f9e-3de9326259e0",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13224,
+            "cache_read_input_tokens": 34826,
+            "output_tokens": 1124
+          },
+          "cost_usd_estimated": 0.177783
+        },
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "Gecko remains on the cork branch in nearly the same position across all frames with no visible food dish, prey, or active skin-removal, so it defaults to general/minimal movement.",
+          "session_id": "795dfcc4-1a1c-49e7-895b-9c3593e4c1f3",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4705,
+            "cache_read_input_tokens": 43252,
+            "output_tokens": 1029
+          },
+          "cost_usd_estimated": 0.094431
+        },
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "Gecko remains largely stationary on the cork perch across all frames with no visible food, water, or skin-removal action, so default classification is moving.",
+          "session_id": "008750f4-f8a1-430a-a04d-620645a48479",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4691,
+            "cache_read_input_tokens": 43252,
+            "output_tokens": 1021
+          },
+          "cost_usd_estimated": 0.094091
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "745c11bb-d9d3-45d0-8b54-b6d1bb41fabc": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "moving",
+          "confidence": 0.6,
+          "reasoning": "Gecko's head is visible near foliage across frames with slight positional shifts but no visible food dish, prey, or anchored repeated licking pattern, so default to moving.",
+          "session_id": "ab28ed0c-2412-4bb1-9a71-4a648dc0b164",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13256,
+            "cache_read_input_tokens": 34864,
+            "output_tokens": 1166
+          },
+          "cost_usd_estimated": 0.179172
+        },
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "Gecko's head shifts position and orientation slightly across frames near a leaf/hide with no visible food dish, prey, or repeated licking action.",
+          "session_id": "0724fa69-c2d0-43ef-ab82-77bd8da71548",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4664,
+            "cache_read_input_tokens": 43296,
+            "output_tokens": 1011
+          },
+          "cost_usd_estimated": 0.093593
+        },
+        {
+          "label": "moving",
+          "confidence": 0.6,
+          "reasoning": "The gecko's head and body shift slightly across the frames near the shelter/decor with no visible food dish, prey, or skin-shedding evidence, consistent with general repositioning.",
+          "session_id": "5d3b929a-c02e-48d8-934e-e7725d50544c",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 231,
+            "cache_read_input_tokens": 47821,
+            "output_tokens": 1101
+          },
+          "cost_usd_estimated": 0.0537755
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "748c1b7d-b634-4793-a9bc-cdf87bee350e": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "Gecko stays draped over the cork branch across all frames with only minor head/body shifting; no dish, prey, water contact, or skin removal is visible, so it defaults to general movement/repositioning.",
+          "session_id": "8948df96-5b5f-45b6-a909-2452c1c39c4b",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13085,
+            "cache_read_input_tokens": 34793,
+            "output_tokens": 1027
+          },
+          "cost_usd_estimated": 0.1739515
+        },
+        {
+          "label": "moving",
+          "confidence": 0.4,
+          "reasoning": "Gecko is draped over the cork branch with only subtle shifts in position across frames; no food dish, prey, or anchored repeated-licking posture is visible, so default locomotion/resting activity applies.",
+          "session_id": "e47b09a9-8ca4-479f-bdd6-2b0955596086",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4785,
+            "cache_read_input_tokens": 43226,
+            "output_tokens": 1113
+          },
+          "cost_usd_estimated": 0.097318
+        },
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "The gecko remains largely stationary draped over the cork perch across all frames with only minor head/body shifts and no visible food, water contact, or skin-removal action.",
+          "session_id": "29c480d2-17e4-4daa-8490-e1096fea0cc3",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4698,
+            "cache_read_input_tokens": 43226,
+            "output_tokens": 1049
+          },
+          "cost_usd_estimated": 0.09484799999999999
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "75f784f3-9e21-49cf-acb1-879a9e243d99": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "unseen",
+          "confidence": 0.75,
+          "reasoning": "모든 프레임이 강한 조명 플레어로 대부분 하얗게 노출되어 있고, 게코의 몸체나 움직임을 식별할 수 있는 부분이 보이지 않는다.",
+          "session_id": "815edd5d-ce27-4771-9149-5f3f56bd6a40",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13148,
+            "cache_read_input_tokens": 34785,
+            "output_tokens": 1107
+          },
+          "cost_usd_estimated": 0.1765775
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.55,
+          "reasoning": "Frames are dominated by an overexposed white glare with only a tiny fragment (possible eye) faintly visible, so the gecko's body and activity cannot be reliably identified.",
+          "session_id": "660cff77-ee96-4a98-ad89-c15b60cc0635",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4732,
+            "cache_read_input_tokens": 43199,
+            "output_tokens": 1090
+          },
+          "cost_usd_estimated": 0.0961995
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.55,
+          "reasoning": "Frames are dominated by an overexposed light glare occluding most of the view; only a faint possible eye-like speck appears near a rock decor edge in later frames with no identifiable body or clear movement.",
+          "session_id": "a14910cb-8952-4e27-b9dd-acf1adde9283",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4853,
+            "cache_read_input_tokens": 43188,
+            "output_tokens": 1194
+          },
+          "cost_usd_estimated": 0.100004
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "7b3e66f7-d967-478d-a049-bf9e12880295": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "unseen",
+          "confidence": 0.75,
+          "reasoning": "All six frames show an essentially static, unchanging terrarium view with no identifiable gecko body visible in the frame.",
+          "session_id": "17f2520e-f1eb-45f1-9656-777475c05d80",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13104,
+            "cache_read_input_tokens": 34753,
+            "output_tokens": 1035
+          },
+          "cost_usd_estimated": 0.1743215
+        },
+        {
+          "label": "moving",
+          "confidence": 0.4,
+          "reasoning": "게코가 나무 가지 위 같은 위치에 거의 정지해 있으며, 뚜렷한 급이/음수/탈피 제거 행동이 관찰되지 않아 기본값인 moving으로 분류함.",
+          "session_id": "0b1fb27b-b5a1-4003-aedf-dbb91c13bd6f",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4858,
+            "cache_read_input_tokens": 43172,
+            "output_tokens": 1136
+          },
+          "cost_usd_estimated": 0.09859599999999999
+        },
+        {
+          "label": "moving",
+          "confidence": 0.4,
+          "reasoning": "Gecko rests nearly motionless on branch across all frames with no visible food/water source, prey, or active skin-removal action, so default to moving.",
+          "session_id": "c4fc0d6c-7517-46bc-86f4-859eac745a2e",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4919,
+            "cache_read_input_tokens": 43179,
+            "output_tokens": 1195
+          },
+          "cost_usd_estimated": 0.1006845
+        }
+      ],
+      "unanimous": false,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "84ca0e44-4a65-4213-898e-c20f7ebe2777": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "shedding",
+          "confidence": 0.55,
+          "reasoning": "A pale, papery skin flap is visible detached near the gecko's head against its normal darker textured body, consistent with active ecdysis, though the exact removal motion is not clearly resolved across frames.",
+          "session_id": "bbcd58b5-f13f-4d3e-80aa-8e13009ff7f2",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13265,
+            "cache_read_input_tokens": 34793,
+            "output_tokens": 1207
+          },
+          "cost_usd_estimated": 0.1802515
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.55,
+          "reasoning": "모든 프레임에서 형체를 명확히 구분하기 어렵고 정지된 텍스처만 보이며 관찰 가능한 움직임이나 특정 행동이 확인되지 않음.",
+          "session_id": "9b4edbf3-6432-46f9-b22b-c1c9ec09a365",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 416,
+            "cache_read_input_tokens": 47700,
+            "output_tokens": 1272
+          },
+          "cost_usd_estimated": 0.05983999999999999
+        },
+        {
+          "label": "moving",
+          "confidence": 0.35,
+          "reasoning": "Textured body and white object are visible but mostly static across frames with no clear tongue contact with food, anchored repeated licking, or visible skin-removal action, so default to moving.",
+          "session_id": "a883bc41-4a59-4377-abd5-116ef763d9bb",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4905,
+            "cache_read_input_tokens": 43226,
+            "output_tokens": 1260
+          },
+          "cost_usd_estimated": 0.102193
+        }
+      ],
+      "unanimous": false,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "88c41a95-b1e8-445a-8b61-02b6c53956bb": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "moving",
+          "confidence": 0.6,
+          "reasoning": "Gecko changes position/orientation across frames on a branch with no visible food, prey, water contact, or shed skin removal.",
+          "session_id": "86e1a7dc-dd38-409d-b70f-241d392de71a",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13078,
+            "cache_read_input_tokens": 34811,
+            "output_tokens": 1013
+          },
+          "cost_usd_estimated": 0.17354050000000001
+        },
+        {
+          "label": "moving",
+          "confidence": 0.75,
+          "reasoning": "The gecko repositions and climbs on the branch across frames with no visible food, water, or shedding skin evidence.",
+          "session_id": "ea611c3b-96f3-499a-96a5-c7279ef8bdc7",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4722,
+            "cache_read_input_tokens": 43245,
+            "output_tokens": 1057
+          },
+          "cost_usd_estimated": 0.0952975
+        },
+        {
+          "label": "moving",
+          "confidence": 0.6,
+          "reasoning": "Gecko repositions itself along the branch/rock surface with no visible food dish, prey, or clear licking-of-fixed-point posture across the frames.",
+          "session_id": "7b5296f0-fa7f-4878-9dfc-c9d47a5054fa",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 163,
+            "cache_read_input_tokens": 47736,
+            "output_tokens": 998
+          },
+          "cost_usd_estimated": 0.050477999999999995
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "922a1cba-5898-418b-85bd-5c76cd00d778": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "shedding",
+          "confidence": 0.6,
+          "reasoning": "후반 프레임에서 밝은 흰색의 허물 조각이 나타나 게코 입 주변에서 점점 길게 늘어나는 모습이 관찰되어 탈피 중 허물을 떼어내는 행동으로 판단됨.",
+          "session_id": "da4c1177-5485-474b-a050-d254fff40ff9",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 12331,
+            "cache_read_input_tokens": 33931,
+            "output_tokens": 1109
+          },
+          "cost_usd_estimated": 0.1680305
+        },
+        {
+          "label": "shedding",
+          "confidence": 0.55,
+          "reasoning": "4~6번 프레임에서 게코 몸 주변에 밝고 얼룩덜룩한 흰색 조각(탈피 허물로 추정)이 나타나 점차 늘어지는 모습이 관찰되어 탈피 중으로 판단됨.",
+          "session_id": "c4f6dd67-05e2-4764-866f-57505b9a32d7",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 359,
+            "cache_read_input_tokens": 45990,
+            "output_tokens": 1242
+          },
+          "cost_usd_estimated": 0.057664999999999994
+        },
+        {
+          "label": "moving",
+          "confidence": 0.35,
+          "reasoning": "게코 형체가 어두운 그늘에 위치하고 후반 프레임에 흰색 물체가 나타나지만 손이나 혀-먹이 접촉이 명확히 보이지 않아 특정 섭식 행동으로 단정하기 어려움.",
+          "session_id": "b745d36c-2d74-4dbe-ab32-122fd495461d",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4087,
+            "cache_read_input_tokens": 42337,
+            "output_tokens": 1208
+          },
+          "cost_usd_estimated": 0.09226849999999999
+        }
+      ],
+      "unanimous": false,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "9789c34f-e4a3-4d19-b28e-e25baa9a54c1": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "unseen",
+          "confidence": 0.85,
+          "reasoning": "No gecko body is visible in any of the six frames; only enclosure decor, a hide, and IR glare are seen throughout.",
+          "session_id": "135b1f60-25a7-49d0-9fb4-778c2da12d41",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13167,
+            "cache_read_input_tokens": 34852,
+            "output_tokens": 1073
+          },
+          "cost_usd_estimated": 0.175951
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.75,
+          "reasoning": "No identifiable gecko body is visible in any frame; only decor, a cable-like object, and lens glare are shown throughout the clip.",
+          "session_id": "1b6dfc28-c2f6-4a37-b785-8d9ac6378d5d",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4750,
+            "cache_read_input_tokens": 43287,
+            "output_tokens": 1095
+          },
+          "cost_usd_estimated": 0.0965485
+        },
+        {
+          "label": "moving",
+          "confidence": 0.5,
+          "reasoning": "Only a curved pale tail-like fragment is visible retracting out of frame across the images with no identifiable feeding, drinking, or shedding evidence, consistent with brief movement.",
+          "session_id": "1e3aee19-5b95-43db-8ac8-7df01133de01",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4775,
+            "cache_read_input_tokens": 43280,
+            "output_tokens": 1134
+          },
+          "cost_usd_estimated": 0.09777
+        }
+      ],
+      "unanimous": false,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "9cc31d6f-dfc1-4d37-b592-3ac43f5b9758": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "moving",
+          "confidence": 0.6,
+          "reasoning": "The gecko's feet and body gradually emerge and climb up the decor across the frames, with no visible food dish, prey, or anchored repeated licking pattern observed.",
+          "session_id": "d6aeca26-e9ea-40d4-8245-41f4777b0fce",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13164,
+            "cache_read_input_tokens": 34853,
+            "output_tokens": 1073
+          },
+          "cost_usd_estimated": 0.1759215
+        },
+        {
+          "label": "moving",
+          "confidence": 0.6,
+          "reasoning": "The gecko's foot/limb is briefly visible then it appears climbing near the glass/hide in the final frame, showing general locomotion without clear evidence of sustained licking, food dish, or prey.",
+          "session_id": "bae66079-d5a7-45d2-acc2-66235479b20d",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 271,
+            "cache_read_input_tokens": 47799,
+            "output_tokens": 1137
+          },
+          "cost_usd_estimated": 0.055064499999999995
+        },
+        {
+          "label": "moving",
+          "confidence": 0.6,
+          "reasoning": "Gecko's limbs and body are visible climbing/repositioning across frames with no visible food dish, prey, or clear anchored repeated-licking posture on a fixed surface.",
+          "session_id": "6d8c204b-f802-40d0-a99c-76d08cda53dd",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 244,
+            "cache_read_input_tokens": 47799,
+            "output_tokens": 1103
+          },
+          "cost_usd_estimated": 0.05394449999999999
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "9e6b6a69-5031-4aa2-b0ad-ae3ad7228100": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "Gecko is climbing/positioned on leaf and branch decor with no visible food dish, prey, or clear repeated licking of a fixed surface; body posture across frames is largely static/climbing with no removal action evident.",
+          "session_id": "2ecf37c3-1206-40ef-81c0-9d6c4870043b",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13130,
+            "cache_read_input_tokens": 34853,
+            "output_tokens": 1057
+          },
+          "cost_usd_estimated": 0.1751815
+        },
+        {
+          "label": "moving",
+          "confidence": 0.5,
+          "reasoning": "Gecko is clinging to a leaf/branch in a static climbing posture across frames with no visible food dish, prey, or clear repeated licking action, so default classification is moving.",
+          "session_id": "59df88fd-70c1-4cdf-bc23-a9249eb673e2",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 350,
+            "cache_read_input_tokens": 47799,
+            "output_tokens": 1208
+          },
+          "cost_usd_estimated": 0.05762949999999999
+        },
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "Gecko is stationary and clinging to a leaf/branch near a hide with head slightly turned across frames, but no visible food/prey/water contact or skin removal is observed, so default classification is moving.",
+          "session_id": "4af07416-32ae-4124-8952-2810e9558ee7",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 178,
+            "cache_read_input_tokens": 47799,
+            "output_tokens": 1045
+          },
+          "cost_usd_estimated": 0.0518345
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "b02ab63e-13bf-4570-80b3-2bb73ce4ee7c": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "unseen",
+          "confidence": 0.5,
+          "reasoning": "Frames are nearly identical, dominated by glare and a dark object obscuring most of the enclosure; only a faint white shape (possibly loose shed skin or a limb) is visible with no discernible movement or identifiable gecko body across the clip.",
+          "session_id": "6e5381c5-6cdf-4b9e-92fa-e6cdf37b42b4",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13529,
+            "cache_read_input_tokens": 34853,
+            "output_tokens": 1452
+          },
+          "cost_usd_estimated": 0.1890465
+        },
+        {
+          "label": "shedding",
+          "confidence": 0.55,
+          "reasoning": "Pale, loose translucent skin is visible draped near the gecko's limb on the branch across all frames, consistent with shed skin, though no active pulling motion is clearly seen.",
+          "session_id": "5b8f3aa4-6b6f-4a69-8420-6480ca19dc10",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 308,
+            "cache_read_input_tokens": 47799,
+            "output_tokens": 1169
+          },
+          "cost_usd_estimated": 0.05623449999999999
+        },
+        {
+          "label": "moving",
+          "confidence": 0.4,
+          "reasoning": "Whitish loose skin patches are visible near the gecko's body across nearly static frames, but no active skin-pulling or removal motion is observed, so it does not meet the shedding criteria and defaults to moving.",
+          "session_id": "90e36ed3-a926-4059-959a-032f7adb8d4a",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 309,
+            "cache_read_input_tokens": 47799,
+            "output_tokens": 1181
+          },
+          "cost_usd_estimated": 0.0565445
+        }
+      ],
+      "unanimous": false,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "bfb7156c-dc5a-4ea0-b30f-ca8ecdf337d2": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "moving",
+          "confidence": 0.7,
+          "reasoning": "The gecko remains on the cork ledge across all frames, shifting head and body position slightly with no visible food dish, water contact, or skin-shedding action, consistent with general movement/repositioning.",
+          "session_id": "2a783ff6-3404-4d6e-b9e5-b9c603867389",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13205,
+            "cache_read_input_tokens": 34904,
+            "output_tokens": 1110
+          },
+          "cost_usd_estimated": 0.177282
+        },
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "Gecko remains on the cork perch with only slight body/head shifts across frames; no food dish, prey, water-licking posture, or skin removal is visible, so default to moving.",
+          "session_id": "413a20b5-610a-420e-8306-8bb5e0dc7b66",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 205,
+            "cache_read_input_tokens": 47887,
+            "output_tokens": 1087
+          },
+          "cost_usd_estimated": 0.053198499999999996
+        },
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "게코가 코르크 가지 위에서 몸 위치를 약간씩 바꾸며 이동/정지하는 모습만 보이고, 먹이 접시·프레이·탈피 흔적 등 특정 행동의 명확한 증거는 없다.",
+          "session_id": "0909d22f-ce14-4b2d-9854-8d1b8c704a2b",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4767,
+            "cache_read_input_tokens": 43350,
+            "output_tokens": 1155
+          },
+          "cost_usd_estimated": 0.09825
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "c8dd5dbd-0d73-4d8b-8ba5-13471757a6ab": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "unseen",
+          "confidence": 0.85,
+          "reasoning": "No identifiable gecko body is visible in any of the six frames; only enclosure decor, branch, and an overexposed IR glare are shown throughout the clip.",
+          "session_id": "66f2fa4a-0fde-438c-bc82-9d0904230451",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13172,
+            "cache_read_input_tokens": 34873,
+            "output_tokens": 1075
+          },
+          "cost_usd_estimated": 0.17606149999999998
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.75,
+          "reasoning": "모든 프레임이 강한 IR 조명 플레어로 과다노출되어 있고 게코의 몸체가 식별 가능한 형태로 관찰되지 않아 행동을 판단할 수 없음.",
+          "session_id": "a22739ef-4b1c-4cdc-bfcc-141d7708380b",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4779,
+            "cache_read_input_tokens": 43338,
+            "output_tokens": 1130
+          },
+          "cost_usd_estimated": 0.09773899999999999
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.85,
+          "reasoning": "All frames show only an overexposed white blur and static enclosure decor with no identifiable gecko body or movement across the clip.",
+          "session_id": "d935aa2c-2b68-446c-996f-a5ba630ef39c",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 184,
+            "cache_read_input_tokens": 47862,
+            "output_tokens": 1019
+          },
+          "cost_usd_estimated": 0.05127599999999999
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "ddc4eb01-486d-43cb-ade5-b2af2b52d31c": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "moving",
+          "confidence": 0.65,
+          "reasoning": "Gecko is progressively climbing over the cork branch, changing position frame to frame with no visible food, prey, or anchored licking, consistent with general locomotion.",
+          "session_id": "b2f4d40d-4e19-44e8-b680-45f87be6dd19",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13110,
+            "cache_read_input_tokens": 34844,
+            "output_tokens": 1026
+          },
+          "cost_usd_estimated": 0.17420200000000002
+        },
+        {
+          "label": "moving",
+          "confidence": 0.7,
+          "reasoning": "게코가 코르크 나뭇가지를 따라 자세만 바꾸며 이동하고 있으며, 피부 벗김 행동이나 먹이/음수 접촉이 관찰되지 않아 이동으로 분류함.",
+          "session_id": "9a7903dc-9698-4b63-9d97-ed647de8d777",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4896,
+            "cache_read_input_tokens": 43280,
+            "output_tokens": 1277
+          },
+          "cost_usd_estimated": 0.102555
+        },
+        {
+          "label": "moving",
+          "confidence": 0.75,
+          "reasoning": "The gecko is seen progressively crawling along the cork branch across frames with no visible food dish, prey, or active skin-removal action.",
+          "session_id": "7c941185-ed15-472e-84a2-2d51be46908b",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4724,
+            "cache_read_input_tokens": 43269,
+            "output_tokens": 1065
+          },
+          "cost_usd_estimated": 0.0955295
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "dfb3d43e-25f0-4c01-933c-7ab4448b9f48": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "moving",
+          "confidence": 0.35,
+          "reasoning": "A gecko head is faintly visible at the top of frame but is mostly out of view or occluded by glare; no clear feeding, drinking, or skin-removal action is observable, so default to moving.",
+          "session_id": "aa2c5080-84c3-42fd-a9f0-affdca1a0a8d",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13306,
+            "cache_read_input_tokens": 34848,
+            "output_tokens": 1231
+          },
+          "cost_usd_estimated": 0.181289
+        },
+        {
+          "label": "moving",
+          "confidence": 0.35,
+          "reasoning": "게코의 머리가 프레임 전반에 걸쳐 거의 같은 위치에서 식별되나 강한 조명 반사로 대부분 가려져 있고, 먹이/물 접촉이나 탈피 제거 행동의 명확한 증거가 없어 기본값인 이동으로 분류함.",
+          "session_id": "99daca6a-a559-4be7-bbd3-0fa29911b0ff",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 5053,
+            "cache_read_input_tokens": 43300,
+            "output_tokens": 1464
+          },
+          "cost_usd_estimated": 0.10880999999999999
+        },
+        {
+          "label": "moving",
+          "confidence": 0.4,
+          "reasoning": "Gecko's head is faintly visible near the top of the frame across all timestamps but the view is largely obscured by a bright flare and no clear feeding, drinking, or shedding action can be discerned.",
+          "session_id": "824f2435-df27-4bab-9d5a-a13eaba40382",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4692,
+            "cache_read_input_tokens": 43287,
+            "output_tokens": 973
+          },
+          "cost_usd_estimated": 0.09291849999999999
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "e5e24602-c448-4c05-905a-9301ed046a89": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "moving",
+          "confidence": 0.5,
+          "reasoning": "Gecko is mostly off-frame; briefly appears near a dish in the last two frames without clear tongue-to-food contact, so default to moving.",
+          "session_id": "933d1786-d25b-4b23-b8b3-c1fd6fc9ac34",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13103,
+            "cache_read_input_tokens": 34743,
+            "output_tokens": 1027
+          },
+          "cost_usd_estimated": 0.1741065
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.55,
+          "reasoning": "Gecko is absent for most frames and only a brief unidentifiable fragment appears near the bowl in the last two frames, with no clear observable behavior.",
+          "session_id": "ffd24288-a4fe-454f-ab6e-1d2cb9ba1717",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4691,
+            "cache_read_input_tokens": 43154,
+            "output_tokens": 1028
+          },
+          "cost_usd_estimated": 0.094217
+        },
+        {
+          "label": "moving",
+          "confidence": 0.5,
+          "reasoning": "Gecko is absent for most frames but briefly appears near the dish area in the last two frames with no clear tongue-to-food contact, so classified as moving.",
+          "session_id": "2bc87978-8965-43e6-a74f-914313ba5718",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4733,
+            "cache_read_input_tokens": 43158,
+            "output_tokens": 1084
+          },
+          "cost_usd_estimated": 0.09603900000000001
+        }
+      ],
+      "unanimous": false,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "e5e75a3e-e709-4df0-bdf0-0fad161e2913": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "The gecko briefly appears in frames 3-4 near the branch/paper with body position shifting, but is largely obscured/absent in other frames, with no visible food dish, prey, or anchored licking pattern.",
+          "session_id": "228c968f-8ac5-4e83-b7a5-4429d36e4733",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13154,
+            "cache_read_input_tokens": 34813,
+            "output_tokens": 1061
+          },
+          "cost_usd_estimated": 0.1755015
+        },
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "The gecko briefly appears near foliage/paper in frames 3-4 with visible body but no clear feeding, drinking, or shedding action, then it is not visible in the other frames.",
+          "session_id": "fa8174a4-32ef-4440-9257-208dc7377569",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4714,
+            "cache_read_input_tokens": 43253,
+            "output_tokens": 1048
+          },
+          "cost_usd_estimated": 0.09499649999999998
+        },
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "Gecko's head briefly visible emerging near white paper/leaf in frames 3-4, otherwise occluded, with no clear feeding, drinking, or shedding evidence.",
+          "session_id": "a8322f39-48c3-44c9-b2c9-f91b028cef6e",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 244,
+            "cache_read_input_tokens": 47755,
+            "output_tokens": 1103
+          },
+          "cost_usd_estimated": 0.0539225
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "e5edf886-22b1-47ce-8684-c57b762439b0": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "Gecko remains in nearly the same resting position on the cork branch across all frames with no visible feeding, drinking, or shedding action, so it defaults to general low-activity movement.",
+          "session_id": "96cb0938-6b1f-4738-be68-f8b12ba968c1",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13102,
+            "cache_read_input_tokens": 34764,
+            "output_tokens": 1050
+          },
+          "cost_usd_estimated": 0.17468199999999998
+        },
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "Gecko remains nearly stationary on the cork branch across all frames with no visible food dish, prey, or clear skin-removal action, so default classification is moving.",
+          "session_id": "499cc5f6-3575-434a-a41a-721dbcf5fee5",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4696,
+            "cache_read_input_tokens": 43172,
+            "output_tokens": 1046
+          },
+          "cost_usd_estimated": 0.094726
+        },
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "The gecko remains stationary on the cork branch across all frames with visible pale/whitish skin patches near the tail base, but no active skin-pulling or removal motion is observed, so it defaults to moving rather than confirmed shedding.",
+          "session_id": "de91b286-02eb-4776-a652-24f875b382be",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4963,
+            "cache_read_input_tokens": 43161,
+            "output_tokens": 1339
+          },
+          "cost_usd_estimated": 0.1047155
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "fb0328cb-d37b-41aa-8613-218de449801b": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "moving",
+          "confidence": 0.6,
+          "reasoning": "Gecko is absent in early frames then appears climbing/descending along the decor near the hide in later frames with no visible food, prey, or anchored licking posture.",
+          "session_id": "f0f60342-69fa-4aa4-9df7-ee6a5e58ab3d",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13108,
+            "cache_read_input_tokens": 34757,
+            "output_tokens": 1056
+          },
+          "cost_usd_estimated": 0.1748885
+        },
+        {
+          "label": "moving",
+          "confidence": 0.75,
+          "reasoning": "The gecko is seen climbing/descending along decor across frames with no visible food dish, prey, or anchored repeated licking, indicating general locomotion.",
+          "session_id": "6fa67502-28a9-4447-a5fd-ee63c4b30ca5",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4698,
+            "cache_read_input_tokens": 43144,
+            "output_tokens": 1035
+          },
+          "cost_usd_estimated": 0.094457
+        },
+        {
+          "label": "moving",
+          "confidence": 0.65,
+          "reasoning": "The gecko appears on the right side of the frame and its position shifts/descends across frames, consistent with locomotion; no food, prey, water-licking, or shedding evidence is visible.",
+          "session_id": "eb7054ad-2bc9-479d-ae3f-00a36ce4971c",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 230,
+            "cache_read_input_tokens": 47649,
+            "output_tokens": 1059
+          },
+          "cost_usd_estimated": 0.0526295
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "fb59b152-37bc-4014-92e5-a7c98fed737a": {
+      "set": "shedding_fp",
+      "fp_label": "shedding",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "moving",
+          "confidence": 0.4,
+          "reasoning": "Gecko is visible with pale skin patches near head suggesting pre-shed dullness, but no active skin removal action is observed across the near-identical frames, so it defaults to moving.",
+          "session_id": "60e646a9-25b5-4c16-b0b5-d3841edb2063",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13275,
+            "cache_read_input_tokens": 34793,
+            "output_tokens": 1219
+          },
+          "cost_usd_estimated": 0.18065150000000002
+        },
+        {
+          "label": "moving",
+          "confidence": 0.4,
+          "reasoning": "Gecko remains nearly stationary across all frames with pale flaky skin visible near the eye/head but no observable active removal or repeated licking, so it defaults to moving.",
+          "session_id": "adfcdef3-f459-46c3-bb51-f3aaabe8b706",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4771,
+            "cache_read_input_tokens": 43199,
+            "output_tokens": 1127
+          },
+          "cost_usd_estimated": 0.0975145
+        },
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "Gecko head is stationary near a hide across all frames with a whitish jagged patch near the jaw suggesting possible pre-shed skin, but no active skin-pulling or removal motion is visible, so it defaults to moving.",
+          "session_id": "eefb857b-7234-4b0b-aa21-ab6330053dd7",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4817,
+            "cache_read_input_tokens": 43199,
+            "output_tokens": 1189
+          },
+          "cost_usd_estimated": 0.0995245
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "135c6248-7205-4ccc-b2cf-3bf62e7cc8b1": {
+      "set": "drinking_fp",
+      "fp_label": "drinking",
+      "gt": null,
+      "runs": [
+        {
+          "label": "unseen",
+          "confidence": 0.85,
+          "reasoning": "All six frames show the empty enclosure interior with lighting/decor but no identifiable gecko body part is visible.",
+          "session_id": "28cbcd65-32bd-4d5f-8b11-3c9b7e2e15f0",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13149,
+            "cache_read_input_tokens": 34865,
+            "output_tokens": 1006
+          },
+          "cost_usd_estimated": 0.1741025
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.55,
+          "reasoning": "Frames show only the enclosure interior with glare from the IR light and decor/branches; no identifiable gecko body is visible across the clip.",
+          "session_id": "48e1a8e7-7288-4f17-8ff1-cf7adfb6cc09",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4727,
+            "cache_read_input_tokens": 43307,
+            "output_tokens": 1072
+          },
+          "cost_usd_estimated": 0.0957535
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.85,
+          "reasoning": "No gecko is visible in any of the six frames; only enclosure interior, cables, and decor are shown.",
+          "session_id": "bac48324-3ff5-4dd5-8f40-bf25af4780e9",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4687,
+            "cache_read_input_tokens": 43296,
+            "output_tokens": 1022
+          },
+          "cost_usd_estimated": 0.094098
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "25ee99b0-dec6-472a-b0bb-b78fa4c5eafd": {
+      "set": "drinking_fp",
+      "fp_label": "drinking",
+      "gt": null,
+      "runs": [
+        {
+          "label": "unseen",
+          "confidence": 0.9,
+          "reasoning": "All six frames show only the empty enclosure with no gecko visible anywhere in the frame.",
+          "session_id": "01ee86aa-e461-402e-bde6-8fc34c4d403d",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13113,
+            "cache_read_input_tokens": 34864,
+            "output_tokens": 970
+          },
+          "cost_usd_estimated": 0.172842
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.85,
+          "reasoning": "No gecko body is identifiable in any of the six frames; only the empty enclosure and decor are visible.",
+          "session_id": "e943fa35-5919-41c0-86a1-7f94fb068056",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4666,
+            "cache_read_input_tokens": 43296,
+            "output_tokens": 959
+          },
+          "cost_usd_estimated": 0.092313
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.85,
+          "reasoning": "All six frames show only the empty enclosure interior with no identifiable gecko body visible.",
+          "session_id": "746c378a-faee-4cb3-a7e6-72c636a0caa8",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 155,
+            "cache_read_input_tokens": 47799,
+            "output_tokens": 987
+          },
+          "cost_usd_estimated": 0.050154500000000005
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "29a74166-1024-4bdd-a497-b1133a86549b": {
+      "set": "drinking_fp",
+      "fp_label": "drinking",
+      "gt": null,
+      "runs": [
+        {
+          "label": "unseen",
+          "confidence": 0.9,
+          "reasoning": "All six frames show only the empty enclosure interior with no gecko visible.",
+          "session_id": "d5ab29b0-89d5-4822-89e4-d040846ef43c",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13032,
+            "cache_read_input_tokens": 34743,
+            "output_tokens": 933
+          },
+          "cost_usd_estimated": 0.1710465
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.9,
+          "reasoning": "No gecko is visible in any of the six frames throughout the clip; only the empty enclosure interior is shown.",
+          "session_id": "18e28550-3124-494f-a31a-fffbaa5abb22",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4677,
+            "cache_read_input_tokens": 43158,
+            "output_tokens": 974
+          },
+          "cost_usd_estimated": 0.092729
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.85,
+          "reasoning": "All six frames show only the enclosure interior with plants, decor, and equipment; no gecko body or fragment is identifiable in any frame.",
+          "session_id": "dde0c725-2692-4d88-8ac8-88b309de8c17",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4684,
+            "cache_read_input_tokens": 43157,
+            "output_tokens": 1034
+          },
+          "cost_usd_estimated": 0.09429850000000001
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "3db14864-cc42-4a8e-b077-ba249d3cfdc4": {
+      "set": "drinking_fp",
+      "fp_label": "drinking",
+      "gt": null,
+      "runs": [
+        {
+          "label": "unseen",
+          "confidence": 0.75,
+          "reasoning": "No identifiable gecko is visible in any of the six frames; only enclosure decor, tubing, and fixtures are shown.",
+          "session_id": "a83892e6-76d0-43fa-95f3-17fd3f276253",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13110,
+            "cache_read_input_tokens": 34823,
+            "output_tokens": 978
+          },
+          "cost_usd_estimated": 0.1729915
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.85,
+          "reasoning": "All six frames show a static IR enclosure interior with no identifiable gecko body visible across the clip.",
+          "session_id": "bf79cd93-4fa4-4ba8-beff-38b037c8edc8",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 198,
+            "cache_read_input_tokens": 47753,
+            "output_tokens": 1032
+          },
+          "cost_usd_estimated": 0.051686499999999996
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.85,
+          "reasoning": "No identifiable gecko body is visible in any of the six frames throughout the clip.",
+          "session_id": "a916c0a7-75c1-4cbd-8f11-e9c50c91dac8",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4658,
+            "cache_read_input_tokens": 43253,
+            "output_tokens": 955
+          },
+          "cost_usd_estimated": 0.0921115
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "439e1798-a7fc-4368-8dda-835fb5a6b51a": {
+      "set": "drinking_fp",
+      "fp_label": "drinking",
+      "gt": null,
+      "runs": [
+        {
+          "label": "moving",
+          "confidence": 0.4,
+          "reasoning": "Gecko is stationary in almost the same position across all frames with no visible food dish, prey, or licking behavior, so default classification is moving.",
+          "session_id": "0c0d054a-43fa-49f2-a367-21bb57a9ff42",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13109,
+            "cache_read_input_tokens": 34804,
+            "output_tokens": 1009
+          },
+          "cost_usd_estimated": 0.173747
+        },
+        {
+          "label": "moving",
+          "confidence": 0.4,
+          "reasoning": "Gecko remains nearly static across all frames with no visible food, water, or skin-shedding evidence, so default to moving with low-moderate confidence.",
+          "session_id": "987f03af-a5f7-47ae-ab56-2961752c8924",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4692,
+            "cache_read_input_tokens": 43225,
+            "output_tokens": 1026
+          },
+          "cost_usd_estimated": 0.0942125
+        },
+        {
+          "label": "moving",
+          "confidence": 0.45,
+          "reasoning": "Gecko remains largely stationary in the same position across all frames with no visible food/prey, water, or skin-removal action, so no specialized behavior can be confirmed.",
+          "session_id": "07e1b39d-3d3a-4aca-826a-57843810b0f9",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4652,
+            "cache_read_input_tokens": 43215,
+            "output_tokens": 1005
+          },
+          "cost_usd_estimated": 0.0932825
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "6c16a62b-f572-4008-84dc-b6c700777ada": {
+      "set": "drinking_fp",
+      "fp_label": "drinking",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "unseen",
+          "confidence": 0.9,
+          "reasoning": "No gecko is visible in any of the six sampled frames; only the empty enclosure with branch, dishes, and hides is shown.",
+          "session_id": "8c401732-cba1-49e9-a69e-90781b33963a",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13064,
+            "cache_read_input_tokens": 34764,
+            "output_tokens": 998
+          },
+          "cost_usd_estimated": 0.173002
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.9,
+          "reasoning": "No gecko is visible in any of the six frames; the enclosure appears empty with no identifiable animal or movement.",
+          "session_id": "730f2b75-9463-4fc9-9e1c-61de26d70612",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 172,
+            "cache_read_input_tokens": 47656,
+            "output_tokens": 958
+          },
+          "cost_usd_estimated": 0.049527999999999996
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.9,
+          "reasoning": "All six frames show only the empty enclosure interior with no gecko visible.",
+          "session_id": "3cd0af37-ff3b-4c3b-8fca-6cb3bc7e0df7",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 174,
+            "cache_read_input_tokens": 47656,
+            "output_tokens": 958
+          },
+          "cost_usd_estimated": 0.049547999999999995
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "a57ce7cd-77cb-473a-b935-191111186acd": {
+      "set": "drinking_fp",
+      "fp_label": "drinking",
+      "gt": null,
+      "runs": [
+        {
+          "label": "unseen",
+          "confidence": 0.9,
+          "reasoning": "No gecko is visible in any of the six frames; only enclosure equipment and decor are shown.",
+          "session_id": "4a518ee1-e82b-4705-b979-6e9df07b4d4d",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13036,
+            "cache_read_input_tokens": 34744,
+            "output_tokens": 916
+          },
+          "cost_usd_estimated": 0.170662
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.9,
+          "reasoning": "6장의 모든 프레임에서 사육장 내부만 보이고 게코의 신체 일부가 식별되지 않는다.",
+          "session_id": "25838a67-3fcb-45cc-9efb-2cfbe0bec6ba",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4679,
+            "cache_read_input_tokens": 43152,
+            "output_tokens": 959
+          },
+          "cost_usd_estimated": 0.092371
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.9,
+          "reasoning": "No gecko is visible in any of the six frames across the clip; only enclosure decor and lighting equipment are shown.",
+          "session_id": "d0d93aee-0266-444c-a48f-d3e2e592edf3",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4636,
+            "cache_read_input_tokens": 43134,
+            "output_tokens": 974
+          },
+          "cost_usd_estimated": 0.09230699999999999
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "ad4bd25e-0d38-4464-9923-b22bf952a870": {
+      "set": "drinking_fp",
+      "fp_label": "drinking",
+      "gt": null,
+      "runs": [
+        {
+          "label": "unseen",
+          "confidence": 0.75,
+          "reasoning": "All six frames show only enclosure equipment and glare with no identifiable gecko body or movement visible.",
+          "session_id": "577bbed8-b5a1-4150-ba2a-df0b9ed08219",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13094,
+            "cache_read_input_tokens": 34784,
+            "output_tokens": 996
+          },
+          "cost_usd_estimated": 0.173262
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.75,
+          "reasoning": "All six frames show only the enclosure interior with glare and plants; no identifiable gecko body or movement is visible.",
+          "session_id": "b6ab4316-3ac0-4af4-a759-b7b1ae280ad8",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4683,
+            "cache_read_input_tokens": 43206,
+            "output_tokens": 1001
+          },
+          "cost_usd_estimated": 0.093488
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.75,
+          "reasoning": "All six frames show only the enclosure interior with heavy IR glare and no identifiable gecko body or movement visible.",
+          "session_id": "011ad540-304a-4c8d-9246-2d58b99cbfec",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4721,
+            "cache_read_input_tokens": 43203,
+            "output_tokens": 1050
+          },
+          "cost_usd_estimated": 0.09509149999999998
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "b0171f2d-329d-43b7-8cbb-b742065ad1b6": {
+      "set": "drinking_fp",
+      "fp_label": "drinking",
+      "gt": "moving",
+      "runs": [
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "Gecko is perched near a dish/hide with head shifting slightly across frames but no visible tongue-to-food contact or anchored repeated licking pattern is confirmed.",
+          "session_id": "f421c284-a446-4883-b39b-cef4d1d0ae97",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13104,
+            "cache_read_input_tokens": 34827,
+            "output_tokens": 1031
+          },
+          "cost_usd_estimated": 0.1742585
+        },
+        {
+          "label": "moving",
+          "confidence": 0.5,
+          "reasoning": "Gecko remains near dish/decor with head lowered across frames but no clear repeated tongue-to-paste contact or anchored licking posture is visible, so default to moving.",
+          "session_id": "eb3cee55-ada7-4f7c-aeff-038c64785063",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4799,
+            "cache_read_input_tokens": 43253,
+            "output_tokens": 1153
+          },
+          "cost_usd_estimated": 0.09847149999999999
+        },
+        {
+          "label": "moving",
+          "confidence": 0.55,
+          "reasoning": "게코가 돔형 은신처 위에서 자세를 약간씩 바꾸며 위치를 이동하지만, 먹이 접시나 반복적인 혀 접촉 등 특정 행동의 뚜렷한 증거는 보이지 않는다.",
+          "session_id": "79b0f7e2-5bb7-4972-aca3-c533348e964b",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 296,
+            "cache_read_input_tokens": 47755,
+            "output_tokens": 1078
+          },
+          "cost_usd_estimated": 0.053817500000000004
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    },
+    "e679f8ad-9011-4bc2-a489-1bb93c54ead8": {
+      "set": "drinking_fp",
+      "fp_label": "drinking",
+      "gt": null,
+      "runs": [
+        {
+          "label": "unseen",
+          "confidence": 0.85,
+          "reasoning": "No gecko body is identifiable in any of the six frames; the enclosure is visible but the animal itself cannot be located.",
+          "session_id": "9b114389-b534-4ce4-ae45-8fd315154e07",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 13105,
+            "cache_read_input_tokens": 34813,
+            "output_tokens": 1016
+          },
+          "cost_usd_estimated": 0.1738865
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.85,
+          "reasoning": "No identifiable gecko body is visible in any of the six frames; only enclosure decor, hides, and foliage are seen.",
+          "session_id": "ace27d40-a835-47a9-8bc4-b5e63c5c5b25",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 193,
+            "cache_read_input_tokens": 47733,
+            "output_tokens": 994
+          },
+          "cost_usd_estimated": 0.0506765
+        },
+        {
+          "label": "unseen",
+          "confidence": 0.85,
+          "reasoning": "All six frames show only the empty enclosure interior with decor and foliage; no gecko body is identifiable in any frame.",
+          "session_id": "951c2b93-0664-4e70-aa20-bec660f50233",
+          "usage": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 4690,
+            "cache_read_input_tokens": 43253,
+            "output_tokens": 994
+          },
+          "cost_usd_estimated": 0.0934065
+        }
+      ],
+      "unanimous": true,
+      "outcome_b": "nondeterminism_weak"
+    }
+  }
+}

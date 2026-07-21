@@ -4,7 +4,26 @@
 > Slack 운영 개편: `docs/superpowers/plans/2026-07-16-vlm-slack-operations-cleanup.md` · 감사: `reports/vlm-backfill-progress-20260716/REPORT.md`
 > **🔴 2026-07-16 live runtime 재검증 (현재 정본, read-only):** Mac mini `baeg-endeuui-Macmini.local`(KST) production = nightly `main b9dc9eb`. LaunchAgents 전부 exit 0 — `com.petcam.vlm-candidate-worker`(22/00/02/04:00, `VLM_EXPECTED_HOST`=Mac mini, provider `claude_cli_batch`, `VLM_ROUTER_ENABLED=1`, `REGISTER_HIGHLIGHTS=0`), `com.petcam.vlm-historical-backfill`(매시 :35 24×, live 처리 `source=2026-07-12 selected=30 succeeded=19+11`), `com.petcam.vlm-backfill-finalizer`(20:30 one-shot self-unload), `com.petcam.nightly-reporter`(22/00/02/04:05, WINDOW_HOURS=2), `uk.tera-ai.petcam-router-features`(상주 running, WD petcam-lab). **candidate-worker는 Mac mini에 정상 로드**(과거 "MacBook 발견/Mac mini verified 아님" 서술은 **superseded** — single-host hardening 완료). activity-worker는 **MacBook**에만 존재. temp media 0. 통합 하이브리드 설계: `petcam-lab/docs/superpowers/specs/2026-07-16-python-evidence-hybrid-design.md` §0.
 
-## 2026-07-21 — P1 오탐 재측정 (Task 3+5): pre-reg 완료, **실행은 ANTHROPIC_API_KEY 대기로 차단**
+## 2026-07-21 (2) — P1 오탐 재측정 **플랜 B(구독 CLI 약식) 완료: adopt (약식 B)**
+
+배경: A안(temp=0) 실행이 owner 크레딧 결제 콘솔 결함으로 보류 → owner "크레딧 구매 없이" 지시로
+약식 프로토콜 B 승인·실행. **A안은 약식 대체가 아니라 결제 해소 후 확정판으로 그대로 유효.**
+
+- **pre-reg**: `experiments/label-determinism-remeasure/TEST-SHEET-B.md` (`f1f541e`, 사후 변경 없음).
+  표본 = A안 sample_list 42건 그대로. 로컬 `claude -p` 구독(2.1.177), exact `claude-sonnet-5`,
+  v4.0 append, 6장@768q85, `--json-schema` 7-class, 클립당 3회. 판정: **3/3 원 오탐 라벨 재현만
+  "진짜 오탐(강)"**, 게이트 ≤25% adopt (A안 동일).
+- **결과** (`REPORT-B.md` + `results_b.json`): **126/126콜 완주, 진짜 오탐(강) 0/42 (shedding 0/32 ·
+  drinking 0/10) → `adopt` (약식 B)**. 3회 일치율 83.3%(35/42) — 비-unanimous 7클립 = temp>0 비결정성
+  직접 증거. 126런 라벨분포 moving 70/unseen 48/drinking 4/shedding 4. 토큰 ≈6.17M(대부분 cache),
+  $0(구독), 한도/인증 실패 0. 관찰: unseen 38% = 6장@768 입력 정보부족 신호, `3e51c7ed` drinking 3/3
+  안정 오분류(신규 GT 주목), 스크립트 `scripts/remeasure_label_determinism_b.py`(+27 tests).
+- **실행 사고(결과 무영향)**: 13:39~43 외부 요인으로 1차 배치 진행분 삭제+프로세스 종료(untracked
+  results만 소실, 커밋 파일 무손상) → 재실행 완주. REPORT-B §6-4.
+- **다음**: P1 결정론 배선(Task 4, owner 승인 게이트) 방향 유지 · decision-gate 회신(Task 6) ·
+  P2는 강 잔존 0이라 보류(A안 확정 후 재판단).
+
+## 2026-07-21 — P1 오탐 재측정 (Task 3+5): pre-reg 완료, **A안 실행은 ANTHROPIC_API_KEY 대기로 차단**
 
 plan `docs/superpowers/plans/2026-07-21-nightly-label-determinism-plan.md` Task 3+5. owner "자동진행" 위임분.
 

@@ -12,7 +12,7 @@ import json
 import subprocess
 from pathlib import Path
 
-_SYSTEM_FILE = Path(__file__).parent / "prompts" / "system.v4.1.md"
+_SYSTEM_FILE = Path(__file__).parent / "prompts" / "system.v4.0.md"
 
 
 def classify_clip(frame_paths: list[Path]) -> dict:

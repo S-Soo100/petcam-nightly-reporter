@@ -4,9 +4,8 @@ from decimal import Decimal
 from pathlib import Path
 from reporter.vlm_budget import Usage,calculate_cost
 
-SYSTEM_PROMPT_PATH=Path(__file__).parent/"prompts/system.v4.1.md"
-SYSTEM_PROMPT=SYSTEM_PROMPT_PATH.read_text()
-OUTPUT_SCHEMA={"type":"object","properties":{"action":{"type":"string","enum":["eating_paste","eating_prey","drinking","shedding","basking","moving","unseen","hand_feeding"]},"confidence":{"type":"number","minimum":0,"maximum":1},"reasoning":{"type":"string","maxLength":300}},"required":["action","confidence","reasoning"],"additionalProperties":False}
+SYSTEM_PROMPT=(Path(__file__).parent/"prompts/system.v4.0.md").read_text()
+OUTPUT_SCHEMA={"type":"object","properties":{"action":{"type":"string","enum":["eating_paste","eating_prey","drinking","shedding","moving","unseen","hand_feeding"]},"confidence":{"type":"number","minimum":0,"maximum":1},"reasoning":{"type":"string","maxLength":300}},"required":["action","confidence","reasoning"],"additionalProperties":False}
 @dataclass(frozen=True,slots=True)
 class AnalyzerResult:
     provider_request_id:str;model_requested:str;model_actual:str;result:dict;usage:Usage;cost_usd:Decimal;model_mismatch:bool

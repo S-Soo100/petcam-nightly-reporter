@@ -61,12 +61,6 @@ def test_format_queued_reduces_analyzed_and_shows_wait():
     assert "대기 2" in msg
 
 
-def test_format_basking_as_korean_rest_without_collapsing_to_other():
-    msg = format_vlm_run_summary(_summary(action_dist={"basking": 2, "moving": 1}))
-    assert "· 행동: 휴식 2 · 일반이동 1" in msg
-    assert "기타" not in msg
-
-
 def test_format_cost_zero_shows_zero_and_subscription():
     msg = format_vlm_run_summary(_summary(direct_api_cost_usd=0.0, provider="claude_cli_batch"))
     assert "· 모델: Claude Sonnet 5 구독 · 직접 API 비용 0원" in msg

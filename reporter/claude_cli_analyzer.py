@@ -91,10 +91,9 @@ def _build_diagnostic(code, phase, *, exit_code=None, stdout="", stderr="",
         provider_subattempts=subattempts, recovered=recovered,
     )
 
-_SYSTEM_FILE = Path(__file__).parent / "prompts" / "system.v4.1.md"
+_SYSTEM_FILE = Path(__file__).parent / "prompts" / "system.v4.0.md"
 _ACTIONS = [
-    "eating_paste", "eating_prey", "drinking", "shedding",
-    "basking", "moving", "unseen", "hand_feeding",
+    "eating_paste", "eating_prey", "drinking", "shedding", "moving", "unseen", "hand_feeding"
 ]
 _SCHEMA = {
     "type": "object",

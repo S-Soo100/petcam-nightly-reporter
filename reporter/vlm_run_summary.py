@@ -20,10 +20,10 @@ _SLOT_LABEL = {
     "diversity_discovery": "다양성", "exclusion_audit": "제외감사",
 }
 # v4.0 행동 클래스 → 운영자용 한글 라벨. allowlist 밖 action 은 raw 노출 대신 기타(other)로 묶는다.
-_ACTION_ALLOWLIST = ("eating_paste", "eating_prey", "drinking", "shedding", "basking", "moving", "unseen", "hand_feeding")
+_ACTION_ALLOWLIST = ("eating_paste", "eating_prey", "drinking", "shedding", "moving", "unseen", "hand_feeding")
 _ACTION_LABEL = {
     "eating_paste": "페이스트 섭취", "eating_prey": "먹이 섭취", "drinking": "핥기",
-    "shedding": "탈피", "basking": "휴식", "moving": "일반이동", "unseen": "게코 안 보임",
+    "shedding": "탈피", "moving": "일반이동", "unseen": "게코 안 보임",
     "hand_feeding": "손급여", "other": "기타",
 }
 _STATUS_ORDER = ("succeeded", "failed_retryable", "failed_terminal", "held_model_mismatch")

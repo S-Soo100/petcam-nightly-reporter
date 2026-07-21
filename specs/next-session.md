@@ -2,6 +2,15 @@
 
 > 정본: `docs/superpowers/plans/2026-07-16-vlm-single-host-operations-hardening.md` + `specs/2026-07-16-vlm-single-host-operations-hardening-design.md`
 > Slack 운영 개편: `docs/superpowers/plans/2026-07-16-vlm-slack-operations-cleanup.md` · 감사: `reports/vlm-backfill-progress-20260716/REPORT.md`
+> **🔴 2026-07-16 live runtime 재검증 (현재 정본, read-only):** Mac mini `baeg-endeuui-Macmini.local`(KST) production = nightly `main b9dc9eb`. LaunchAgents 전부 exit 0 — `com.petcam.vlm-candidate-worker`(22/00/02/04:00, `VLM_EXPECTED_HOST`=Mac mini, provider `claude_cli_batch`, `VLM_ROUTER_ENABLED=1`, `REGISTER_HIGHLIGHTS=0`), `com.petcam.vlm-historical-backfill`(매시 :35 24×, live 처리 `source=2026-07-12 selected=30 succeeded=19+11`), `com.petcam.vlm-backfill-finalizer`(20:30 one-shot self-unload), `com.petcam.nightly-reporter`(22/00/02/04:05, WINDOW_HOURS=2), `uk.tera-ai.petcam-router-features`(상주 running, WD petcam-lab). **candidate-worker는 Mac mini에 정상 로드**(과거 "MacBook 발견/Mac mini verified 아님" 서술은 **superseded** — single-host hardening 완료). activity-worker는 **MacBook**에만 존재. temp media 0. 통합 하이브리드 설계: `petcam-lab/docs/superpowers/specs/2026-07-16-python-evidence-hybrid-design.md` §0.
+
+## 2026-07-21 — P1 오탐 재측정 (Task 3+5): pre-reg 완료, **실행은 ANTHROPIC_API_KEY 대기로 차단**
+
+plan `docs/superpowers/plans/2026-07-21-nightly-label-determinism-plan.md` Task 3+5. owner "자동진행" 위임분.
+
+- **Task 3 완료 (pre-reg 동결):** `experiments/label-determinism-remeasure/TEST-SHEET.md` + `sample_list.json`(42건 = shedding FP 32 + drinking FP 후보 10, r2_key·duration DB SELECT 실측 고정). 게이트: 진짜 오탐 잔존율 ≤25% adopt / 25~50% hold / >50% reject, 3회 일치율 기대 ≥95%, 예상 $1.0~2.1, 하드 게이트 $5.
+- **배치 스크립트 준비 완료 (TDD GREEN):** `scripts/remeasure_label_determinism.py` + `tests/test_remeasure_label_determinism.py`(24 tests, 전체 306 passed). v4.0 핀은 파일 무수정 런타임 override(`pin_v40()` — production main `618f4f8` 동치 프롬프트+7-class 스키마), exact `claude-sonnet-5`, temp=0, 6장@768q85, 클립당 3회, durable results.json+resume, 일시 에러만 backoff≤3, 4xx·model-mismatch 즉시 중단, production 테이블 쓰기 0.
+- **⛔ Task 5 실행 차단:** `.env`에 `ANTHROPIC_API_KEY` 부재 (`.env.example`엔 direct_api용으로 문서화돼 있으나 실 `.env` 미설정, 셸 env에도 없음). 계약상 키 생성/요청 금지 → preflight가 exit 2로 fail-closed 확인. **owner가 키를 `.env`에 넣으면 `uv run python scripts/remeasure_label_determinism.py` 1회 실행 → results.json 요약 출력 → REPORT.md 작성 + decision-gate 회신(Task 6)** 순으로 재개.
 
 ## 배포 상태 (2026-07-16 04:xx KST) — deployed, 실사이클 검증 대기
 

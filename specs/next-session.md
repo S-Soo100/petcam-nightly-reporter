@@ -4,6 +4,10 @@
 > Slack 운영 개편: `docs/superpowers/plans/2026-07-16-vlm-slack-operations-cleanup.md` · 감사: `reports/vlm-backfill-progress-20260716/REPORT.md`
 > **🔴 2026-07-16 live runtime 재검증 (현재 정본, read-only):** Mac mini `baeg-endeuui-Macmini.local`(KST) production = nightly `main b9dc9eb`. LaunchAgents 전부 exit 0 — `com.petcam.vlm-candidate-worker`(22/00/02/04:00, `VLM_EXPECTED_HOST`=Mac mini, provider `claude_cli_batch`, `VLM_ROUTER_ENABLED=1`, `REGISTER_HIGHLIGHTS=0`), `com.petcam.vlm-historical-backfill`(매시 :35 24×, live 처리 `source=2026-07-12 selected=30 succeeded=19+11`), `com.petcam.vlm-backfill-finalizer`(20:30 one-shot self-unload), `com.petcam.nightly-reporter`(22/00/02/04:05, WINDOW_HOURS=2), `uk.tera-ai.petcam-router-features`(상주 running, WD petcam-lab). **candidate-worker는 Mac mini에 정상 로드**(과거 "MacBook 발견/Mac mini verified 아님" 서술은 **superseded** — single-host hardening 완료). activity-worker는 **MacBook**에만 존재. temp media 0. 통합 하이브리드 설계: `petcam-lab/docs/superpowers/specs/2026-07-16-python-evidence-hybrid-design.md` §0.
 
+## 2026-07-21 (3) — 🔧 launchd auth 장애(auth_probe_failed) 원인 확정·해소
+
+**증상:** 7/20 21:35 UTC부터 candidate/backfill 전 사이클 `auth_probe_failed`(claude exit 1), 재로그인해도 지속. **원인(실측):** claude 자격증명 **이원 저장** — 키체인 항목("Claude Code-credentials")과 `~/.claude/.credentials.json` 파일. **launchd(GUI 도메인)=키체인 우선, SSH=파일 폴백.** 7/20 22:00 KST 키체인 항목 갱신(mdat) 직후 launchd만 `loggedIn:false`. SSH 재로그인은 파일만 갱신 → launchd 미해소. 진단 결정타 = `launchctl submit` 1회성 잡으로 진짜 launchd 스폰 재현(env -i/SSH 재현은 파일을 읽어 못 잡음). **해소(07-21 16:2x):** `security delete-generic-password -s "Claude Code-credentials"` → 전 컨텍스트 파일 폴백 → launchd probe `loggedIn:true` + 적체 15건 처리 재개(submitted 4 실측). ⚠️ 재발 조건: 대화형 재로그인이 키체인 항목 재생성 시 — 같은 삭제로 해소. petcam-lab 메모리 `cron-launchd-keychain` 3차 함정 등재. 밤 카메라 재가동(야간모드) 대비 파이프라인 정상 전제 충족. 잔여: 3e51c7ed는 owner 육안 확정(물 디스펜서 통과=moving 정당, 안정 confabulation 1/42 — petcam-lab decision-gate 기록).
+
 ## 2026-07-21 (2) — P1 오탐 재측정 **플랜 B(구독 CLI 약식) 완료: adopt (약식 B)**
 
 배경: A안(temp=0) 실행이 owner 크레딧 결제 콘솔 결함으로 보류 → owner "크레딧 구매 없이" 지시로

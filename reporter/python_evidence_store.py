@@ -35,7 +35,8 @@ ALLOWED_STATUS = frozenset(
 )
 ALLOWED_SOURCE = frozenset({"live", "historical"})
 ALLOWED_FAILURE_CODES = frozenset({
-    "r2_download_failed", "decode_no_frames", "decode_insufficient_frames", "invalid_metadata",
+    "r2_download_failed", "source_media_missing", "r2_access_denied",
+    "decode_no_frames", "decode_insufficient_frames", "invalid_metadata",
     "detector_failed", "temporal_compute_failed", "db_transient", "db_error", "internal_error",
 })
 # Gate 7-column provenance identity (clip_prelabels provenance 컬럼과 동일 순서).

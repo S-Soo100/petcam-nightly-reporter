@@ -35,6 +35,7 @@ from gecko_vision_gate.provenance import SAMPLER_VERSION, SCHEMA_VERSION, GatePr
 from gecko_vision_gate.temporal_evidence import ALGORITHM_VERSION, compute_temporal_evidence
 
 from reporter import config, r2
+from reporter.r2 import R2AccessDenied, R2SourceMissing
 from reporter.activity_store import find_prelabel
 from reporter.gate_lock import acquire_common_gate_lock, release_common_gate_lock
 from reporter.gate_runner import InsufficientSampleFrames, load_detector, model_version_for
@@ -117,7 +118,13 @@ def _process_one(sb, job, dest, clip_keys, *, gate_config, producer, worker_host
 
     try:
         download_fn(r2_key, dest)
-    except Exception as e:  # noqa: BLE001 — R2 일시 오류는 정상(재시도 대상)
+    except R2SourceMissing as e:
+        # 원본 media 소실(404/NoSuchKey) — 재시도해도 없음. terminal 분리(무한 재큐 방지, design §6).
+        raise _JobFailure("source_media_missing", retryable=False) from e
+    except R2AccessDenied as e:
+        # 인증/권한 오류 — terminal + cycle nonzero. secret 원문은 담지 않는다.
+        raise _JobFailure("r2_access_denied", retryable=False) from e
+    except Exception as e:  # noqa: BLE001 — timeout/429/5xx/기타 R2 일시 오류는 재시도 대상
         raise _JobFailure("r2_download_failed", retryable=True) from e
 
     # 기존 prelabel 이 있으면 재사용(detector 재호출 금지). 없으면 fresh Gate 1회 + clip_prelabels 저장.

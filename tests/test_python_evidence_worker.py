@@ -14,6 +14,7 @@ import pytest
 from reporter import python_evidence_worker as worker
 from reporter import gate_lock
 from reporter.gate_runner import InsufficientSampleFrames
+from reporter.r2 import R2AccessDenied, R2SourceMissing
 from reporter.python_evidence_store import EvidenceStoreError, EvidenceJob, ProducerInfo, StaleJobError
 from gecko_vision_gate.temporal_evidence import TemporalEvidence, TemporalPoint
 from gecko_vision_gate.schema import PrelabelResult
@@ -56,13 +57,14 @@ class Spies:
 
     def __init__(self, *, prelabel_row=None, temporal=None, download_raises=False,
                  gate_raises=False, gate_insufficient=False, compute_raises=False,
-                 complete_raises=None, insert_raises=False):
+                 complete_raises=None, insert_raises=False, download_exc=None):
         self.calls = {"download": 0, "find": 0, "gate": 0, "compute": 0, "insert": 0,
                       "complete": 0, "fail": []}
         self.insert_prelabels = []
         self._prelabel_row = prelabel_row
         self._temporal = temporal or _temporal()
         self._download_raises = download_raises
+        self._download_exc = download_exc
         self._gate_raises = gate_raises
         self._gate_insufficient = gate_insufficient
         self._compute_raises = compute_raises
@@ -71,6 +73,8 @@ class Spies:
 
     def download(self, r2_key, dest):
         self.calls["download"] += 1
+        if self._download_exc is not None:
+            raise self._download_exc
         if self._download_raises:
             raise RuntimeError("r2 boom")
 
@@ -160,6 +164,25 @@ def test_r2_download_error_is_retryable():
     assert s.calls["fail"] == [("job-clip-1", "r2_download_failed", True)]
     assert s.calls["compute"] == 0 and s.calls["insert"] == 0
     assert stats["failed"] == 1
+
+
+# ── R2 원본 소실(404) → terminal source_media_missing (재시도해도 없음) ──
+
+def test_r2_source_missing_is_terminal():
+    s = Spies(download_exc=R2SourceMissing("r2 object missing (code=404)"))
+    stats = _run_jobs([_job()], {"clip-1": "k1"}, s)
+    assert s.calls["fail"] == [("job-clip-1", "source_media_missing", False)]
+    assert s.calls["compute"] == 0 and s.calls["insert"] == 0
+    assert stats["terminal"] == 1
+
+
+# ── R2 인증/권한 오류(403) → terminal r2_access_denied + cycle nonzero ──
+
+def test_r2_access_denied_is_terminal():
+    s = Spies(download_exc=R2AccessDenied("r2 access denied (code=403)"))
+    stats = _run_jobs([_job()], {"clip-1": "k1"}, s)
+    assert s.calls["fail"] == [("job-clip-1", "r2_access_denied", False)]
+    assert stats["terminal"] == 1 and stats["failed"] == 1  # failed>0 → cycle nonzero
 
 
 # ── transient DB (insert) → retryable ──

@@ -43,6 +43,7 @@ class FakeJobsSB:
         self.jobs = [{"clip_id": c, "evidence_schema_version": _SCHEMA,
                       "algorithm_version": _ALGO} for c in existing_job_clip_ids]
         self.insert_calls = 0
+        self.inserted_clip_ids = []  # 이번 세션에서 실제 신규 insert 된 clip_id (manifest enqueue 검증용)
 
     def table(self, name):
         return _Query(name, self)
@@ -105,6 +106,7 @@ class _Query:
                 if exists and ignore:
                     continue  # on conflict do nothing
                 self._sb.jobs.append(dict(r))
+                self._sb.inserted_clip_ids.append(r["clip_id"])
                 inserted.append(dict(r))
             return _Result(inserted)
 
@@ -147,28 +149,114 @@ def _clips(n, day="2026-07-10"):
     return [{"id": f"clip-{i:03d}", "started_at": f"{day}T{i % 24:02d}:00:00+00:00"} for i in range(n)]
 
 
-# ── CLI 필수 인자 ──
+# ── manifest-bound CLI (B1R2) ──
 
-def test_cli_requires_start_end_limit():
+def test_cli_requires_manifest_sha_and_limit():
     with pytest.raises(SystemExit):
         bf.parse_args([])
     with pytest.raises(SystemExit):
-        bf.parse_args(["--start-date", "2026-07-01"])  # end/limit 누락
+        bf.parse_args(["--availability-manifest", "/abs/canary.jsonl"])  # sha/limit 누락
     with pytest.raises(SystemExit):
-        bf.parse_args(["--start-date", "2026-07-01", "--end-date", "2026-07-02"])  # limit 누락
+        bf.parse_args(["--availability-manifest", "/abs/canary.jsonl",
+                       "--expected-manifest-sha", "a" * 64])  # limit 누락
 
 
-def test_cli_has_no_unbounded_default_limit():
-    ns = bf.parse_args(["--start-date", "2026-07-01", "--end-date", "2026-07-02", "--limit", "50"])
-    assert ns.limit == 50 and ns.start_date == date(2026, 7, 1) and ns.end_date == date(2026, 7, 2)
+def test_cli_manifest_mode_parses():
+    ns = bf.parse_args(["--availability-manifest", "/abs/canary.jsonl",
+                        "--expected-manifest-sha", "a" * 64,
+                        "--required-status", "media_available_silent",
+                        "--limit", "30", "--dry-run"])
+    assert ns.availability_manifest == "/abs/canary.jsonl"
+    assert ns.expected_manifest_sha == "a" * 64
+    assert ns.required_status == "media_available_silent"
+    assert ns.limit == 30 and ns.dry_run is True
 
 
-def test_cli_accepts_optional_cutoff():
-    ns = bf.parse_args(["--start-date", "2026-07-01", "--end-date", "2026-07-02", "--limit", "50",
-                        "--cutoff-started-at", "2026-07-22T02:45:33+00:00"])
-    assert ns.cutoff_started_at == "2026-07-22T02:45:33+00:00"
-    ns2 = bf.parse_args(["--start-date", "2026-07-01", "--end-date", "2026-07-02", "--limit", "50"])
-    assert ns2.cutoff_started_at is None
+def test_cli_required_status_default_and_restricted():
+    ns = bf.parse_args(["--availability-manifest", "/x.jsonl",
+                        "--expected-manifest-sha", "a" * 64, "--limit", "30"])
+    assert ns.required_status == "media_available_silent"  # 기본값
+    with pytest.raises(SystemExit):  # 다른 상태는 거부(silent 만 backfill 입력, design §8)
+        bf.parse_args(["--availability-manifest", "/x.jsonl", "--expected-manifest-sha", "a" * 64,
+                       "--limit", "30", "--required-status", "source_expired"])
+
+
+# ── manifest-bound enqueue ──
+
+def _write_manifest(tmp_path, rows):
+    import json
+    p = tmp_path / "manifest.jsonl"
+    p.write_text("\n".join(json.dumps(r, sort_keys=True) for r in rows) + "\n")
+    return p
+
+
+def _manifest_sha(rows):
+    import hashlib
+    payload = "\n".join(f"{r['clip_id']}\t{r['status']}" for r in sorted(rows, key=lambda x: x["clip_id"]))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _row(clip_id, status):
+    return {"clip_id": clip_id, "camera_id": "camA", "started_at": "2026-07-01T00:00:00+00:00",
+            "source_date": "2026-07-01", "status": status}
+
+
+def test_enqueuer_rejects_wrong_sha_and_non_silent_rows(tmp_path):
+    rows = [_row("s0", "media_available_silent"), _row("s1", "media_available_silent"),
+            _row("s2", "media_available_silent"),
+            _row("o1", "media_available_open"), _row("x1", "source_expired")]
+    path = _write_manifest(tmp_path, rows)
+    SHA = _manifest_sha(rows)
+    SILENT_IDS = {"s0", "s1", "s2"}
+    sb = FakeJobsSB([])
+
+    with pytest.raises(ValueError, match="manifest_sha_mismatch"):
+        bf.enqueue_from_manifest(sb, path, expected_sha="0" * 64, limit=30, dry_run=True)
+
+    stats = bf.enqueue_from_manifest(sb, path, expected_sha=SHA, limit=30, dry_run=False)
+    assert set(sb.inserted_clip_ids) == SILENT_IDS
+    assert stats["selected"] == 3 and stats["enqueued"] == 3
+    # 비-silent 는 절대 enqueue 안 됨
+    assert "o1" not in sb.inserted_clip_ids and "x1" not in sb.inserted_clip_ids
+
+
+def test_enqueuer_dry_run_mutates_nothing(tmp_path):
+    rows = [_row(f"s{i}", "media_available_silent") for i in range(5)]
+    path = _write_manifest(tmp_path, rows)
+    sb = FakeJobsSB([])
+    stats = bf.enqueue_from_manifest(sb, path, expected_sha=_manifest_sha(rows), limit=30, dry_run=True)
+    assert stats["selected"] == 5 and stats["enqueued"] == 0
+    assert sb.insert_calls == 0 and sb.inserted_clip_ids == []
+
+
+def test_enqueuer_missing_progress_skips_existing_jobs(tmp_path):
+    # 이미 job 이 있는 silent clip 은 건너뛰고 다음 missing 으로 전진(재큐 0, 굶김 방지).
+    rows = [_row(f"s{i}", "media_available_silent") for i in range(5)]
+    path = _write_manifest(tmp_path, rows)
+    sb = FakeJobsSB([], existing_job_clip_ids=["s0", "s1"])
+    stats = bf.enqueue_from_manifest(sb, path, expected_sha=_manifest_sha(rows), limit=30, dry_run=False)
+    assert set(sb.inserted_clip_ids) == {"s2", "s3", "s4"}
+    assert stats["selected"] == 3 and stats["enqueued"] == 3
+
+
+def test_enqueuer_respects_limit_and_historical_priority(tmp_path):
+    rows = [_row(f"s{i}", "media_available_silent") for i in range(40)]
+    path = _write_manifest(tmp_path, rows)
+    sb = FakeJobsSB([])
+    stats = bf.enqueue_from_manifest(sb, path, expected_sha=_manifest_sha(rows), limit=10, dry_run=False)
+    assert stats["selected"] == 10 and stats["enqueued"] == 10
+    assert all(j.get("source") == "historical" and j.get("priority") == 10
+               for j in sb.jobs if "source" in j)
+
+
+def test_enqueuer_limit_bounded(tmp_path):
+    rows = [_row("s0", "media_available_silent")]
+    path = _write_manifest(tmp_path, rows)
+    sb = FakeJobsSB([])
+    with pytest.raises(ValueError):
+        bf.enqueue_from_manifest(sb, path, expected_sha=_manifest_sha(rows), limit=0, dry_run=True)
+    with pytest.raises(ValueError):
+        bf.enqueue_from_manifest(sb, path, expected_sha=_manifest_sha(rows), limit=10_000, dry_run=True)
 
 
 # ── enqueue 동작 ──

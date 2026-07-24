@@ -62,6 +62,43 @@ def get_r2_client():
     )
 
 
+# 삭제 대상은 production clip prefix 하위의 단일 파일만(설계 §7). prefix/bucket/nested/상대경로 금지.
+_CLIP_KEY_PREFIX = "terra-clips/clips/"
+
+
+def _validate_clip_key(r2_key: str) -> str:
+    """`terra-clips/clips/<filename>` 정확한 단일 object key 만 통과. 아니면 ValueError(R2 도달 전 거부)."""
+    if not isinstance(r2_key, str) or not r2_key.strip():
+        raise ValueError("blank r2_key")
+    if r2_key.startswith("/") or r2_key.endswith("/"):
+        raise ValueError("r2_key must not start/end with slash")
+    if ".." in r2_key:
+        raise ValueError("r2_key must not contain '..'")
+    if not r2_key.startswith(_CLIP_KEY_PREFIX):
+        raise ValueError("r2_key outside terra-clips/clips/")
+    filename = r2_key[len(_CLIP_KEY_PREFIX):]
+    if not filename or "/" in filename:
+        raise ValueError("r2_key must be exactly one filename under terra-clips/clips/")
+    return r2_key
+
+
+def delete_clip_object(r2_key: str) -> None:
+    """정확히 하나의 R2 object 를 삭제한다(설계 §7). key 검증 후 delete_object 1회.
+
+    list/bulk/prefix delete 는 절대 하지 않는다. R2 오류는 typed(R2AccessDenied) 또는 원본
+    ClientError 로 raise 하되 raw response/message/key/secret 은 담지 않는다(worker 가 r2_delete_failed
+    로 매핑). S3 delete_object 는 멱등(없는 key 도 성공) — 재시도해도 안전.
+    """
+    key = _validate_clip_key(r2_key)  # R2 client 획득 이전에 검증(무효 key 는 호출 0).
+    try:
+        get_r2_client().delete_object(Bucket=config.R2_BUCKET, Key=key)
+    except ClientError as e:
+        typed = classify_r2_client_error(e)
+        if typed is not None:
+            raise typed from e
+        raise  # transient/기타 → worker 의 generic except 가 r2_delete_failed 로 매핑
+
+
 def download_clip(r2_key: str, dest: Path) -> Path:
     """motion_clips.r2_key 로 mp4 GET → dest 저장. dest 부모 디렉토리 자동 생성.
 

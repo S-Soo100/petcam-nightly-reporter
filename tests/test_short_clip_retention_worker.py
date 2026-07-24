@@ -10,11 +10,19 @@ from datetime import datetime, timezone
 
 import pytest
 
-from reporter import short_clip_retention_worker as worker
-from reporter.short_clip_retention_models import DetectionResult, ShortClipCandidate
-from reporter.short_clip_retention_store import ShortClipStoreError
+import hashlib
 
-NOW = datetime(2026, 7, 25, 0, 0, 0, tzinfo=timezone.utc)
+from reporter import short_clip_retention_worker as worker
+from reporter.short_clip_retention_models import DeletionClaim, DetectionResult, ShortClipCandidate
+from reporter.short_clip_retention_store import ShortClipStoreError, StaleShortClipError
+
+NOW = datetime(2026, 7, 25, 0, 0, 0, tzinfo=timezone.utc)  # = 2026-07-25 09:00 KST
+
+
+def _dc(exclusion="e1", clip="c1", key="terra-clips/clips/a.mp4", token="t1"):
+    return DeletionClaim.from_row(
+        {"exclusion_id": exclusion, "clip_id": clip, "r2_key": key, "lease_token": token}
+    )
 
 
 class _Lock:
@@ -222,3 +230,158 @@ def test_worker_module_has_no_media_or_model_symbols():
         "vlm_rolling",
     ):
         assert forbidden not in src, forbidden
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Task 3 — delete cycle + durable Slack
+# ══════════════════════════════════════════════════════════════════════
+def _delete_cycle(**over):
+    kwargs = dict(
+        now=NOW,
+        worker_host="mac",
+        limit=30,
+        claim_fn=over.pop("claim_fn", lambda sb, *, limit, worker_host, now: []),
+        delete_object_fn=over.pop("delete_object_fn", lambda k: None),
+        complete_fn=over.pop("complete_fn", lambda sb, *, exclusion_id, lease_token, fingerprint, now: None),
+        fail_fn=over.pop("fail_fn", lambda sb, *, exclusion_id, lease_token, code, now: None),
+    )
+    kwargs.update(over)
+    return worker.run_delete_cycle(object(), **kwargs)
+
+
+def test_delete_cycle_success_completes_with_key_fingerprint():
+    key = "terra-clips/clips/a.mp4"
+    completed, deleted = [], []
+    stats = _delete_cycle(
+        claim_fn=lambda sb, *, limit, worker_host, now: [_dc(key=key)],
+        delete_object_fn=lambda k: deleted.append(k),
+        complete_fn=lambda sb, *, exclusion_id, lease_token, fingerprint, now: completed.append(fingerprint),
+        fail_fn=lambda *a, **k: (_ for _ in ()).throw(AssertionError("fail called on success")),
+    )
+    assert deleted == [key]
+    assert completed == [hashlib.sha256(key.encode()).hexdigest()]
+    assert completed[0] == completed[0].lower() and len(completed[0]) == 64
+    assert stats["deleted"] == 1 and stats["audit_divergence"] == 0
+
+
+def test_delete_cycle_claim_empty_no_r2():
+    calls = []
+    stats = _delete_cycle(
+        claim_fn=lambda sb, *, limit, worker_host, now: [],
+        delete_object_fn=lambda k: calls.append(k),
+    )
+    assert calls == [] and stats["deleted"] == 0 and stats["claimed"] == 0
+
+
+def test_delete_cycle_r2_failure_fails_once_and_continues():
+    failed, completed, del_calls = [], [], []
+
+    def del_fn(k):
+        del_calls.append(k)
+        if k == "terra-clips/clips/bad.mp4":
+            raise RuntimeError("connreset secret://pw@host")
+
+    stats = _delete_cycle(
+        claim_fn=lambda sb, *, limit, worker_host, now: [
+            _dc(exclusion="e1", key="terra-clips/clips/bad.mp4"),
+            _dc(exclusion="e2", key="terra-clips/clips/good.mp4"),
+        ],
+        delete_object_fn=del_fn,
+        complete_fn=lambda sb, *, exclusion_id, lease_token, fingerprint, now: completed.append(exclusion_id),
+        fail_fn=lambda sb, *, exclusion_id, lease_token, code, now: failed.append((exclusion_id, code)),
+    )
+    assert failed == [("e1", "r2_delete_failed")]  # allowlist code, raw 예외 없음
+    assert completed == ["e2"]                      # 실패해도 다음 object 계속
+    assert stats["delete_failed"] == 1 and stats["deleted"] == 1
+
+
+def test_delete_cycle_complete_false_is_audit_divergence_and_aborts():
+    deleted = []
+
+    def complete_stale(sb, *, exclusion_id, lease_token, fingerprint, now):
+        raise StaleShortClipError("stale complete")
+
+    stats = _delete_cycle(
+        claim_fn=lambda sb, *, limit, worker_host, now: [
+            _dc(exclusion="e1", key="terra-clips/clips/a.mp4"),
+            _dc(exclusion="e2", key="terra-clips/clips/b.mp4"),
+        ],
+        delete_object_fn=lambda k: deleted.append(k),
+        complete_fn=complete_stale,
+    )
+    assert stats["audit_divergence"] == 1
+    assert len(deleted) == 1  # divergence 후 cycle abort — 뒤 claim 처리 안 함(성공 계속 주장 금지)
+
+
+def test_delete_disabled_makes_no_claim_or_r2():
+    claim_called, del_called = [], []
+    rc, _ = _run(
+        delete_enabled=False,
+        claim_deletions_fn=lambda sb, *, limit, worker_host, now: claim_called.append(1) or [],
+        delete_object_fn=lambda k: del_called.append(k),
+        claim_notification_fn=lambda sb, *, summary_date_kst, worker_host, now: None,
+    )
+    assert rc == 0 and claim_called == [] and del_called == []
+
+
+def test_delete_audit_divergence_makes_run_nonzero():
+    def complete_stale(sb, *, exclusion_id, lease_token, fingerprint, now):
+        raise StaleShortClipError("stale")
+
+    rc, _ = _run(
+        delete_enabled=True,
+        claim_deletions_fn=lambda sb, *, limit, worker_host, now: [_dc()],
+        delete_object_fn=lambda k: None,
+        complete_delete_fn=complete_stale,
+        fail_delete_fn=lambda *a, **k: None,
+        claim_notification_fn=lambda sb, *, summary_date_kst, worker_host, now: None,
+    )
+    assert rc == 1
+
+
+# ── durable Slack: report hour gate + claim→complete/release ──
+def _run_slack(**over):
+    posted, completed, released = [], [], []
+    claim_ret = over.pop("claim_ret", "tok-1")
+    post_ok = over.pop("post_ok", True)
+    rc, _ = _run(
+        now=over.pop("now", NOW),  # 09:00 KST
+        report_hour=over.pop("report_hour", 9),
+        claim_notification_fn=lambda sb, *, summary_date_kst, worker_host, now: (
+            posted.append(("claim", summary_date_kst)) or claim_ret
+        ),
+        post_slack_fn=lambda text: (posted.append(("post", text)) or post_ok),
+        complete_notification_fn=lambda sb, *, summary_date_kst, claim_token, now: completed.append(claim_token) or True,
+        release_notification_fn=lambda sb, *, summary_date_kst, claim_token: released.append(claim_token) or True,
+        **over,
+    )
+    return rc, posted, completed, released
+
+
+def test_slack_after_report_hour_claims_and_completes_on_success():
+    rc, posted, completed, released = _run_slack(post_ok=True)
+    kinds = [p[0] for p in posted]
+    assert "claim" in kinds and "post" in kinds
+    assert completed == ["tok-1"] and released == []
+    # 카드에 raw key/token/fingerprint/URL 없음.
+    posted_text = next(p[1] for p in posted if p[0] == "post")
+    for leak in ("terra-clips", "tok-1", "https://", "cloudflarestorage"):
+        assert leak not in posted_text
+
+
+def test_slack_failure_releases_claim():
+    rc, posted, completed, released = _run_slack(post_ok=False)
+    assert completed == [] and released == ["tok-1"]
+
+
+def test_slack_noop_before_report_hour():
+    # 05:00 KST = 2026-07-24 20:00 UTC (report_hour 9 이전) → claim/post 0.
+    before = datetime(2026, 7, 24, 20, 0, 0, tzinfo=timezone.utc)
+    rc, posted, completed, released = _run_slack(now=before, report_hour=9)
+    assert posted == [] and completed == [] and released == []
+
+
+def test_slack_claim_none_sends_nothing():
+    rc, posted, completed, released = _run_slack(claim_ret=None)
+    assert [p[0] for p in posted] == ["claim"]  # claim 시도만, post 없음
+    assert completed == [] and released == []

@@ -1,6 +1,7 @@
 from collections import Counter
 from datetime import datetime
 from reporter.vlm_models import CandidateClip
+from reporter.short_clip_retention_store import load_system_excluded_clip_ids
 
 def _chunks(values,n=200):
     for i in range(0,len(values),n):yield values[i:i+n]
@@ -13,6 +14,12 @@ def load_window_candidates(sb,start,end,policy_version,selector_version):
     rows=sb.table("motion_clips").select("id,camera_id,started_at,duration_sec,r2_key,motion_score,width,height").gte("started_at",start.isoformat()).lt("started_at",end.isoformat()).order("started_at").execute().data
     ids=[r["id"] for r in rows]
     if not ids:return []
+    # 짧은 영상 자동 제외(설계 §6): quarantined/media_deleted 는 새 VLM 후보 선정 전에 걸러낸다.
+    excluded=load_system_excluded_clip_ids(sb,ids)
+    if excluded:
+        rows=[r for r in rows if r["id"] not in excluded]
+        ids=[r["id"] for r in rows]
+        if not ids:return []
     ass=_rows(sb,"clip_activity_assessments","clip_id",ids,lambda q:q.eq("policy_version",policy_version)); amap={r["clip_id"]:r for r in ass}
     pre=_rows(sb,"clip_prelabels","id",[r["prelabel_id"] for r in ass]);pmap={r["id"]:r for r in pre}
     jobs=_rows(sb,"clip_vlm_jobs","clip_id",ids);jmap={}

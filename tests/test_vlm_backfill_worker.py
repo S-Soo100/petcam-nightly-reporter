@@ -139,6 +139,18 @@ def test_prepare_wave_zero_candidates_writes_nothing():
     assert sb.store.get("clip_vlm_jobs", []) == []
 
 
+def test_prepare_wave_excludes_system_quarantined_clips():
+    # 짧은 영상 자동 제외(설계 §6): rolling backfill 선정에서도 quarantined/media_deleted 는 빠진다.
+    # exclude_clip_ids(cross-selector dedup) 와 별개로, motion_clip_system_exclusions 격리도 걸린다.
+    sb = FakeSB({"motion_clip_system_exclusions": [{"clip_id": "20-0", "state": "quarantined"}]})
+    wave = prepare_wave(
+        sb, EPOCH_START, "camera-a", load_fn=_load_wave, enrich_fn=_enrich, select_fn=_select,
+        history_fn=lambda *_a: {}, persist=False)
+    ids = {item.clip.id for item in wave.selected}
+    assert "20-0" not in ids       # 격리 clip 미선정
+    assert len(ids) > 0            # 나머지 후보는 정상 선정
+
+
 def test_prepare_wave_insufficient_creates_only_available_and_dedups():
     # 1~29 후보: 존재분만 생성. exclude_clip_ids 로 cross-selector 중복 제외.
     sb = FakeSB()

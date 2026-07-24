@@ -1,3 +1,5 @@
+from reporter.short_clip_retention_store import load_system_excluded_clip_ids
+
 def create_run_and_jobs(sb,run,jobs):
     if len(jobs)>4:raise ValueError("max 4 jobs")
     return sb.rpc("fn_create_clip_vlm_selector_run",{"p_run":run,"p_jobs":jobs}).execute().data
@@ -84,6 +86,10 @@ def _open_jobs_for_selector(sb,selector_version,*,start=None,end=None,before=Non
         if end is not None:q=q.lt("window_start",end.isoformat())        # exclusive
         if before is not None:q=q.lt("window_start",before.isoformat())  # current window_start exclusive
         rows+=q.order("queued_at").limit(limit).execute().data
+    # 짧은 영상 자동 제외(설계 §6): quarantined/media_deleted clip 의 due/recovery job 은 반환하지 않는다.
+    # 기존 clip_vlm_jobs row 는 읽기만 하고 update/delete 하지 않는다.
+    excluded=load_system_excluded_clip_ids(sb,[r.get("clip_id") for r in rows])
+    if excluded:rows=[r for r in rows if r.get("clip_id") not in excluded]
     rows.sort(key=lambda r:(r.get("queued_at") or ""))
     return rows[:limit]
 

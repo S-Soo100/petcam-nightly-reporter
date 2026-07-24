@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 from supabase import create_client
 
 from reporter import config, slack
+from reporter.short_clip_retention_store import load_system_excluded_clip_ids
 from reporter.vlm_backfill_summary import aggregate_backfill_progress, send_backfill_progress
 from reporter.activity_worker import acquire_activity_lock, release_activity_lock
 from reporter.vlm_backfill_gate import GateEnrichment, enrich_prepool
@@ -182,6 +183,13 @@ def prepare_wave(
         eligible,_reasons=partition_eligibility(loaded);prepool=build_prepool(eligible)
         bucket_inputs[plan.bucket_index]=prepool;clips_seen[plan.bucket_index]=len(loaded);all_prepool+=prepool
     unique={clip.id:clip for clip in all_prepool}
+    # 짧은 영상 자동 제외(설계 §6): rolling backfill 선정에서도 quarantined/media_deleted 는 뺀다.
+    # load_fn 이 이미 걸러도(공유 funnel) 여기서 backfill 층 자체를 fail-closed 로 재확인한다(bounded).
+    sys_excluded=load_system_excluded_clip_ids(sb,list(unique.keys()))
+    if sys_excluded:
+        unique={cid:clip for cid,clip in unique.items() if cid not in sys_excluded}
+        for bi in list(bucket_inputs):
+            bucket_inputs[bi]=[c for c in bucket_inputs[bi] if c.id not in sys_excluded]
     gate:GateEnrichment=enrich_fn(list(unique.values()),checkpoint=config.GATE_CHECKPOINT_PATH)
     enriched={clip.id:clip for clip in gate.clips}
     history=history_fn(sb,camera_id,plans[0].start-timedelta(days=7))

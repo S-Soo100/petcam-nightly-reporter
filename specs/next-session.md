@@ -84,3 +84,12 @@ Task 11 Gate A(commit/push) → B(migration apply) → C(Mac mini preflight) →
 - **첫 실사이클(kickstart 10:39~10:49) VERIFIED**: `source=2026-07-11 selected=30`(첫 미생성 밤 자동 발견) · 성공 19 · 재시도 11 · non-exact model 0 · ledger processing · **regular 19 불변(crossover 0)** · dup clip 0 · created-today 30(<600) · Slack 전송 성공(slack=FAIL 없음) · temp mp4/frame 0 · exit 0.
 - H1 claim(07-11 processing) · H2 host guard(plist env) · H3 pagination · H4 deadline(process 전달) · H5 정합성 전부 런타임 반영.
 - 다음 :35 cycle 이 07-11 잔여 11 retryable resume → 완료 후 07-12 new 진행(rolling 자동).
+
+## 짧은 영상 retention runtime 구현 (2026-07-25, READY_FOR_DEPLOY_REVIEW)
+
+> handoff: `docs/handoff-prompts/2026-07-25-short-clip-retention-runtime-handoff.md` · 보고서: `docs/handoff-prompts/2026-07-25-short-clip-retention-runtime-report.md` · Lab 계약 SOT: `petcam-lab @ 926e5f6`
+
+- **소비자만 구현**(migration 미적용): 모델·RPC adapter 8종·metadata-only 감지 worker(`reporter.short_clip_retention_worker`)·VLM 격리 가드·exact R2 삭제·내구성 Slack·fail-closed LaunchAgent 설치기. commit `e070f4c`→`45514f7`→`9726116`→`ca0279b`.
+- 전체 **442 passed**(baseline 376 유지), compileall/bash -n/diff-check clean. 삭제/Slack/설치는 switch 기본 비활성 + mock 으로만.
+- **정정 반영**: `fn_fail_short_clip_media_delete`는 4-인자(fingerprint 미전달, DB 파생). `complete`만 `sha256(r2_key)` 소문자 64-hex. false/stale RPC = 성공 아님(audit divergence→nonzero).
+- **다음 배포 게이트**: ① Lab migration production apply+probe → ② Phase A shadow 설치(enabled=1/write=0/delete=0) → ③ write 후보 → ④ P4 Cam 2 quarantine canary → ⑤ 7일 뒤 delete 30 canary. 각 단계 별도 승인. Mac mini/LaunchAgent/R2/Slack 무변경.

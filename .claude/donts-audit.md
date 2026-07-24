@@ -18,3 +18,10 @@
 - **진행률은 worker 의 완료 계약과 일치**시킨다. backfill 은 `succeeded+failed_terminal`을 '처리'로, `240−처리`를 '남은 처리'로 표시한다. failed_terminal 은 worker 가 재처리 안 하므로 '남은'에 넣으면 모순(완료율이 영원히 안 참). ETA 도 성공이 아니라 남은 처리량 기준.
 - **scheduled 알림은 durable idempotency**로 보낸다. 실행시각 run_id + 프로세스 메모리로는 수동 재실행·동시 실행 중복을 못 막는다. (selector+window+host) unique + INSERT ON CONFLICT 원자 claim, 전송 실패 시 claim 해제로 재전송.
 - **비용은 정직하게**. 계산값을 무시하고 '0원' 하드코딩 금지 — >0 이면 실제값+경고, provider 로 구독 여부 단정 금지.
+
+## 2026-07-25 — 짧은 영상 retention runtime (Task 1~5)
+
+- **cross-repo RPC 정정은 handoff 정본을 따른다**. Lab plan 의 `fail_media_delete(code, fingerprint)` 2-인자 예시 대신 handoff/​design 의 4-인자 `(exclusion_id, lease_token, allowlisted_code, now)`를 정본으로 채택 — worker 는 fingerprint 를 fail 로 넘기지 않고 DB 가 code 로 파생. 상충 시 최신 handoff 정정 우선.
+- **false/stale RPC 결과는 성공이 아니다**. complete/fail 이 false 면 `StaleShortClipError`로 올려 audit divergence(R2 삭제됐는데 DB 미기록)로 cycle nonzero. R2 삭제 성공을 DB 미반영인 채 성공 보고 금지.
+- **detection 은 metadata-only**. worker 모듈에 download/OpenCV/Gate/detector/model/VLM 심볼 0 을 테스트로 동결(`vlm_host_guard` 는 공유 host guard 라 예외). 삭제는 exact `delete_object` 1회만(list/bulk/prefix 금지).
+- **격리 가드는 read+filter**. `motion_clip_system_exclusions` bounded chunk(200) 조회로 quarantined/media_deleted 를 신규 VLM 소비에서만 제외 — 기존 `clip_vlm_jobs` update/delete 0.

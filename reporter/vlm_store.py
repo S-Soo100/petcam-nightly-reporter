@@ -76,22 +76,32 @@ def load_due_jobs_for_selector(sb,selector_version,start=None,end=None,limit=64)
         rows+=q.order("queued_at").limit(limit).execute().data
     return rows[:limit]
 
+_JOB_PAGE=100        # bounded keyset 페이지 크기(짧은 영상 제외가 앞을 많이 차지해도 뒤 eligible 확보).
+_JOB_MAX_PAGES=200   # 무한 루프 backstop(최대 20000행 스캔).
+
 def _open_jobs_for_selector(sb,selector_version,*,start=None,end=None,before=None,limit=4):
-    """같은 selector 의 queued|failed_retryable 만 조회. status query 를 합친 뒤 Python 에서
-    queued_at 오름차순으로 안정 정렬해 status append 순서에 의존하지 않게 한다."""
-    rows=[]
-    for status in ("queued","failed_retryable"):
-        q=sb.table("clip_vlm_jobs").select("*").eq("selector_version",selector_version).eq("status",status)
+    """같은 selector 의 queued|failed_retryable 을 queued_at 오름차순 stable 로 조회.
+
+    짧은 영상 자동 제외(설계 §6): quarantined/media_deleted clip 의 job 은 건너뛴다. **앞의 제외 job
+    수와 무관하게 뒤의 eligible job 을 limit 만큼** 채우도록 range 로 페이지네이션한다(under-fill 방지).
+    기존 clip_vlm_jobs row 는 읽기만 하고 update/delete 하지 않는다.
+    """
+    page=max(_JOB_PAGE,limit)
+    eligible=[]
+    for p in range(_JOB_MAX_PAGES):
+        q=sb.table("clip_vlm_jobs").select("*").eq("selector_version",selector_version).in_("status",["queued","failed_retryable"])
         if start is not None:q=q.gte("window_start",start.isoformat())   # inclusive
         if end is not None:q=q.lt("window_start",end.isoformat())        # exclusive
         if before is not None:q=q.lt("window_start",before.isoformat())  # current window_start exclusive
-        rows+=q.order("queued_at").limit(limit).execute().data
-    # 짧은 영상 자동 제외(설계 §6): quarantined/media_deleted clip 의 due/recovery job 은 반환하지 않는다.
-    # 기존 clip_vlm_jobs row 는 읽기만 하고 update/delete 하지 않는다.
-    excluded=load_system_excluded_clip_ids(sb,[r.get("clip_id") for r in rows])
-    if excluded:rows=[r for r in rows if r.get("clip_id") not in excluded]
-    rows.sort(key=lambda r:(r.get("queued_at") or ""))
-    return rows[:limit]
+        batch=q.order("queued_at").range(p*page,p*page+page-1).execute().data
+        if not batch:break
+        excluded=load_system_excluded_clip_ids(sb,[r.get("clip_id") for r in batch])
+        for r in batch:
+            if r.get("clip_id") not in excluded:
+                eligible.append(r)
+                if len(eligible)>=limit:return eligible[:limit]
+        if len(batch)<page:break  # 마지막 페이지
+    return eligible[:limit]
 
 def load_due_jobs_for_selector_window(sb,selector_version,start,end,limit=4):
     return _open_jobs_for_selector(sb,selector_version,start=start,end=end,limit=limit)

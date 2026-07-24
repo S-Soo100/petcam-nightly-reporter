@@ -30,6 +30,7 @@ from supabase import create_client
 from reporter import config, r2
 from reporter.short_clip_retention_store import (
     ShortClipStoreError,
+    aggregate_short_clip_daily,
     claim_media_deletions,
     claim_retention_notification,
     complete_media_delete,
@@ -46,6 +47,10 @@ from reporter.vlm_host_guard import HostOwnershipError, require_expected_host
 _KST = ZoneInfo("Asia/Seoul")
 _DEVICE_LABEL = "Mac mini"
 _RULE_VERSION = "short-device-error-v1"
+
+
+class SlackCompleteDivergence(Exception):
+    """Slack 전송은 성공했는데 claim complete 가 false/error — 중복 전송 위험. worker nonzero."""
 
 _LOCK_PATH = "/tmp/petcam-short-clip-retention-worker.lock"
 # 감지·집계 안정성: 무한 페이지 backstop(정상 종료는 page < batch_limit).
@@ -105,10 +110,10 @@ def run_detection(
             try:
                 result = record_fn(sb, clip_id=cand.clip_id, now=now, write=write_enabled)
             except ValueError as exc:
-                # malformed detection route = 한 clip 격리(다음 clip 계속). raw 없이 count.
+                # malformed detection route = 한 clip 격리(다음 clip 계속). raw/​clip UUID 없이 타입만.
                 stats["failed"] += 1
                 print(
-                    f"[short-clip-retention] clip={cand.clip_id[:8]} record_malformed type={type(exc).__name__}",
+                    f"[short-clip-retention] record_malformed type={type(exc).__name__}",
                     file=sys.stderr,
                     flush=True,
                 )
@@ -145,14 +150,20 @@ def run_delete_cycle(
         fingerprint = claim.key_fingerprint()  # in-memory sha256(r2_key) 소문자 64-hex
         try:
             delete_object_fn(claim.r2_key)
-        except Exception as exc:  # noqa: BLE001 — R2 실패는 allowlist code 로 fail + 계속
+        except Exception as exc:  # noqa: BLE001 — R2 실패는 allowlist code 로 fail 기록
             try:
                 fail_fn(
                     sb, exclusion_id=claim.exclusion_id, lease_token=claim.lease_token,
                     code="r2_delete_failed", now=now,
                 )
-            except ShortClipStoreError:
-                pass  # fail 도 stale/오류면 다른 worker 가 lease 회수 — raw 없이 무시
+            except ShortClipStoreError as fexc:
+                # fail RPC 가 false/error(stale lease) = audit divergence. 성공 계속 주장 금지, cycle 중단.
+                stats["audit_divergence"] += 1
+                print(
+                    f"[short-clip-retention] audit_divergence type={type(fexc).__name__}",
+                    file=sys.stderr, flush=True,
+                )
+                break
             stats["delete_failed"] += 1
             print(
                 f"[short-clip-retention] delete_failed type={type(exc).__name__}",
@@ -181,17 +192,21 @@ def maybe_send_slack(
     *,
     now: datetime,
     worker_host: str,
-    stats: dict,
     report_hour: int,
+    aggregate_fn=aggregate_short_clip_daily,
     claim_fn=claim_retention_notification,
     complete_fn=complete_retention_notification,
     release_fn=release_retention_notification,
     post_fn=post_slack,
     summary_fn=format_short_clip_retention_summary,
 ) -> None:
-    """KST 리포트 시각 이후 내구성 1일 카드 1회. claim → post → 성공 complete / 실패 release.
+    """KST 리포트 시각 이후 내구성 1일 카드 1회. claim → (KST 날짜 경계 DB 집계) → post →
+    성공 complete / 실패 release.
 
+    stats 는 per-cycle 값이 아니라 `aggregate_fn` 의 **DB 집계(KST 날짜 경계)** 를 쓴다.
     리포트 시각 이전 no-op cycle 은 Slack 0. 활성 claim(다른 worker)/이미 전송 이면 claim=None → 0.
+    전송 성공 후 complete 가 false/error 면 SlackCompleteDivergence(중복 전송 위험 → worker nonzero);
+    이때 release 하지 않는다(카드는 이미 나갔다). 전송 실패 때만 release 로 다음 사이클 재시도.
     카드는 count/안전 라벨만(raw key/URL/UUID/token/fingerprint 없음, summary_fn 이 보장).
     """
     now_kst = now.astimezone(_KST)
@@ -201,11 +216,17 @@ def maybe_send_slack(
     token = claim_fn(sb, summary_date_kst=day, worker_host=worker_host, now=now)
     if not token:
         return  # 이미 전송됨 / 활성 claim → 중복 전송 없음
+    stats = {**aggregate_fn(sb, now=now), "device_label": _DEVICE_LABEL, "rule_version": _RULE_VERSION}
     text = summary_fn(stats, now_kst)
-    if post_fn(text):
-        complete_fn(sb, summary_date_kst=day, claim_token=token, now=now)
-    else:
-        release_fn(sb, summary_date_kst=day, claim_token=token)
+    if not post_fn(text):
+        release_fn(sb, summary_date_kst=day, claim_token=token)  # 전송 실패 → 재시도 위해 해제
+        return
+    try:
+        ok = complete_fn(sb, summary_date_kst=day, claim_token=token, now=now)
+    except Exception as exc:  # noqa: BLE001 — 전송됐는데 complete 실패 = divergence
+        raise SlackCompleteDivergence(type(exc).__name__) from None
+    if not ok:
+        raise SlackCompleteDivergence("complete returned false")
 
 
 def run(
@@ -229,6 +250,7 @@ def run(
     complete_delete_fn=complete_media_delete,
     fail_delete_fn=fail_media_delete,
     post_slack_fn=post_slack,
+    aggregate_fn=aggregate_short_clip_daily,
     claim_notification_fn=claim_retention_notification,
     complete_notification_fn=complete_retention_notification,
     release_notification_fn=release_retention_notification,
@@ -315,40 +337,39 @@ def run(
                 flush=True,
             )
 
-        # 내구성 일일 Slack 카드(best-effort). 실패해도 감지/삭제 결과를 뒤집지 않는다.
-        slack_stats = {
-            "candidate": stats["candidate"],
-            "quarantined": stats["quarantined"],
-            "review_pending": stats["protected"],
-            "restored": 0,
-            "pending_delete": stats["quarantined"],
-            "deleted": delete_stats["deleted"],
-            "blocked": delete_stats["delete_failed"],
-            "device_label": _DEVICE_LABEL,
-            "rule_version": _RULE_VERSION,
-        }
+        # 내구성 일일 Slack 카드. stats 는 per-cycle 이 아니라 KST 날짜 경계 DB 집계(aggregate_fn).
+        # claim/aggregate/post 실패는 best-effort(다음 사이클 재시도). 단, 전송 성공 후 complete 실패
+        # (SlackCompleteDivergence)는 중복 전송 위험이라 worker nonzero 로 surface 한다.
+        slack_divergence = False
         try:
             maybe_send_slack(
                 sb,
                 now=now,
                 worker_host=hostname,
-                stats=slack_stats,
                 report_hour=report_hour,
+                aggregate_fn=aggregate_fn,
                 claim_fn=claim_notification_fn,
                 complete_fn=complete_notification_fn,
                 release_fn=release_notification_fn,
                 post_fn=post_slack_fn,
                 summary_fn=summary_fn,
             )
-        except Exception as exc:  # noqa: BLE001 — Slack/notification 은 best-effort, raw 없이 타입만
+        except SlackCompleteDivergence as exc:
+            slack_divergence = True
+            print(
+                f"[short-clip-retention] slack_complete_divergence type={type(exc).__name__}",
+                file=sys.stderr,
+                flush=True,
+            )
+        except Exception as exc:  # noqa: BLE001 — claim/aggregate/post 는 best-effort, raw 없이 타입만
             print(
                 f"[short-clip-retention] slack_skipped type={type(exc).__name__}",
                 file=sys.stderr,
                 flush=True,
             )
 
-        # audit divergence(R2 삭제됐는데 DB 미기록)만 cycle 을 nonzero 로 만든다.
-        return 1 if delete_stats["audit_divergence"] > 0 else 0
+        # R2 삭제됐는데 DB 미기록(delete audit divergence) 또는 Slack 전송 후 complete 실패면 nonzero.
+        return 1 if (delete_stats["audit_divergence"] > 0 or slack_divergence) else 0
     except ShortClipStoreError as exc:
         # DB-wide 오류(list/record RPC 계층) — cycle nonzero, raw 없이 타입만.
         print(

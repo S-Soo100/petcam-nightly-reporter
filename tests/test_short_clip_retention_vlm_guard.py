@@ -89,6 +89,43 @@ def test_open_jobs_exclude_quarantined_clip_jobs():
     assert {r["clip_id"] for r in rows} == {"c"}  # a/b 제외, c(candidate) 유지
 
 
+def test_open_jobs_stable_pagination_finds_eligible_behind_many_excluded():
+    # 앞의 quarantined/media_deleted job 수와 무관하게 뒤의 eligible job 을 limit 만큼 찾는다.
+    # 제외 10개(queued_at 앞) + 정상 1개(뒤), limit=1 → 정상 1개를 반드시 반환한다.
+    jobs = [
+        {
+            "id": f"job-x{i}",
+            "clip_id": f"x{i}",
+            "selector_version": "budget-router-v1",
+            "status": "queued",
+            "window_start": datetime(2026, 7, 20, 0, 30, 0, tzinfo=timezone.utc).isoformat(),
+            "queued_at": datetime(2026, 7, 20, 0, 0, i, tzinfo=timezone.utc).isoformat(),
+        }
+        for i in range(10)
+    ]
+    jobs.append(
+        {
+            "id": "job-ok",
+            "clip_id": "ok",
+            "selector_version": "budget-router-v1",
+            "status": "queued",
+            "window_start": datetime(2026, 7, 20, 0, 30, 0, tzinfo=timezone.utc).isoformat(),
+            "queued_at": datetime(2026, 7, 20, 0, 0, 59, tzinfo=timezone.utc).isoformat(),  # 맨 뒤
+        }
+    )
+    sb = FakeSB(
+        {
+            "clip_vlm_jobs": jobs,
+            "motion_clip_system_exclusions": [
+                {"clip_id": f"x{i}", "state": "quarantined"} for i in range(10)
+            ],
+        }
+    )
+    before = datetime(2026, 7, 20, 2, 0, 0, tzinfo=timezone.utc)
+    rows = _open_jobs_for_selector(sb, "budget-router-v1", before=before, limit=1)
+    assert [r["id"] for r in rows] == ["job-ok"]  # 제외 10개 뒤 eligible 1개
+
+
 def test_open_jobs_does_not_mutate_existing_rows():
     jobs = [_job("a"), _job("b")]
     sb = FakeSB(

@@ -177,6 +177,29 @@ def test_malformed_route_is_isolated_and_counted():
     assert rec.calls == ["bad", "good"]  # 뒤 clip 계속 처리
 
 
+def test_malformed_log_has_no_clip_id(capsys):
+    # malformed detection 로그는 clip UUID(prefix 포함)를 담지 않는다 — 예외 타입만.
+    cid = "abcd1234-5678-4abc-8def-000000000000"
+
+    def bad_record(sb, *, clip_id, now, write):
+        raise ValueError("unknown route")
+
+    worker.run_detection(
+        object(),
+        now=NOW,
+        write_enabled=False,
+        batch_limit=10,
+        candidate_under_sec=15,
+        list_candidates_fn=lambda sb, *, candidate_under_sec, cursor, limit: (
+            [_cand(cid)] if cursor is None else []
+        ),
+        record_fn=bad_record,
+    )
+    err = capsys.readouterr().err
+    assert "record_malformed" in err  # 격리 표시는 있고
+    assert cid[:8] not in err and cid not in err  # clip UUID(prefix 포함) 는 없다
+
+
 # ── candidate-list / DB-wide error → nonzero ──
 def test_db_wide_list_error_returns_nonzero():
     def boom_list(sb, *, candidate_under_sec, cursor, limit):
@@ -295,6 +318,30 @@ def test_delete_cycle_r2_failure_fails_once_and_continues():
     assert stats["delete_failed"] == 1 and stats["deleted"] == 1
 
 
+def test_delete_cycle_r2_fail_then_fail_stale_is_audit_divergence_and_aborts():
+    # R2 실패 후 fail RPC 가 false/error(stale) 면 audit divergence → cycle 중단 nonzero(성공 아님).
+    deleted = []
+
+    def del_fn(k):
+        deleted.append(k)
+        raise RuntimeError("boom")  # 모든 R2 삭제 실패
+
+    def fail_stale(sb, *, exclusion_id, lease_token, code, now):
+        raise StaleShortClipError("fail rejected (stale lease)")
+
+    stats = _delete_cycle(
+        claim_fn=lambda sb, *, limit, worker_host, now: [
+            _dc(exclusion="e1", key="terra-clips/clips/a.mp4"),
+            _dc(exclusion="e2", key="terra-clips/clips/b.mp4"),
+        ],
+        delete_object_fn=del_fn,
+        fail_fn=fail_stale,
+    )
+    assert stats["audit_divergence"] == 1
+    assert len(deleted) == 1  # 첫 fail-stale 에서 abort, 뒤 claim 처리 안 함
+    assert stats["delete_failed"] == 0
+
+
 def test_delete_cycle_complete_false_is_audit_divergence_and_aborts():
     deleted = []
 
@@ -340,18 +387,35 @@ def test_delete_audit_divergence_makes_run_nonzero():
 
 
 # ── durable Slack: report hour gate + claim→complete/release ──
+# Slack 카드는 DB 집계(KST 날짜 경계) 값을 쓴다 — per-cycle detection stats 가 아니다.
+_AGG = {
+    "candidate": 34,
+    "quarantined": 31,
+    "review_pending": 3,
+    "restored": 5,
+    "pending_delete": 31,
+    "deleted": 12,
+    "blocked": 1,
+}
+
+
 def _run_slack(**over):
     posted, completed, released = [], [], []
     claim_ret = over.pop("claim_ret", "tok-1")
     post_ok = over.pop("post_ok", True)
+    complete_ret = over.pop("complete_ret", True)
+    agg = over.pop("agg", dict(_AGG))
     rc, _ = _run(
         now=over.pop("now", NOW),  # 09:00 KST
         report_hour=over.pop("report_hour", 9),
+        aggregate_fn=lambda sb, *, now: dict(agg),
         claim_notification_fn=lambda sb, *, summary_date_kst, worker_host, now: (
             posted.append(("claim", summary_date_kst)) or claim_ret
         ),
         post_slack_fn=lambda text: (posted.append(("post", text)) or post_ok),
-        complete_notification_fn=lambda sb, *, summary_date_kst, claim_token, now: completed.append(claim_token) or True,
+        complete_notification_fn=lambda sb, *, summary_date_kst, claim_token, now: (
+            completed.append(claim_token) or complete_ret
+        ),
         release_notification_fn=lambda sb, *, summary_date_kst, claim_token: released.append(claim_token) or True,
         **over,
     )
@@ -362,16 +426,32 @@ def test_slack_after_report_hour_claims_and_completes_on_success():
     rc, posted, completed, released = _run_slack(post_ok=True)
     kinds = [p[0] for p in posted]
     assert "claim" in kinds and "post" in kinds
-    assert completed == ["tok-1"] and released == []
+    assert completed == ["tok-1"] and released == [] and rc == 0
     # 카드에 raw key/token/fingerprint/URL 없음.
     posted_text = next(p[1] for p in posted if p[0] == "post")
     for leak in ("terra-clips", "tok-1", "https://", "cloudflarestorage"):
         assert leak not in posted_text
 
 
+def test_slack_uses_db_aggregate_values_not_cycle_stats():
+    # detection cycle 에는 candidate 1 뿐이지만, 카드는 DB 집계(_AGG)를 쓴다.
+    rc, posted, completed, released = _run_slack()
+    posted_text = next(p[1] for p in posted if p[0] == "post")
+    assert "후보 34" in posted_text and "자동 제외 31" in posted_text
+    assert "Owner 복구 5" in posted_text and "오늘 R2 삭제 12" in posted_text
+
+
 def test_slack_failure_releases_claim():
     rc, posted, completed, released = _run_slack(post_ok=False)
-    assert completed == [] and released == ["tok-1"]
+    assert completed == [] and released == ["tok-1"] and rc == 0
+
+
+def test_slack_complete_false_after_post_makes_run_nonzero():
+    # 전송 성공했는데 complete 가 false → 중복 전송 위험 → worker nonzero(성공 보고 금지).
+    rc, posted, completed, released = _run_slack(post_ok=True, complete_ret=False)
+    assert [p[0] for p in posted] == ["claim", "post"]
+    assert completed == ["tok-1"] and released == []  # release 하지 않는다(이미 전송됨)
+    assert rc == 1
 
 
 def test_slack_noop_before_report_hour():

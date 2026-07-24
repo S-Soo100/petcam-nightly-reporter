@@ -13,9 +13,12 @@ DB 정본(petcam-lab `926e5f6`)의 8개 RPC 를 얇게 감싼다. 원칙:
 from __future__ import annotations
 
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from reporter.short_clip_retention_models import DeletionClaim, DetectionResult, ShortClipCandidate
+
+_KST = ZoneInfo("Asia/Seoul")
 
 # fail RPC allowlist(petcam-lab fn_fail_short_clip_media_delete). raw 예외 텍스트는 절대 안 넘긴다.
 ALLOWED_FAIL_CODES = frozenset(
@@ -130,6 +133,54 @@ def release_retention_notification(sb, *, summary_date_kst: date, claim_token: s
     return bool(_safe_rpc(sb, "fn_release_short_clip_retention_notification", {
         "p_summary_date_kst": summary_date_kst.isoformat(), "p_claim_token": claim_token,
     }))
+
+
+def _count_exclusions(sb, filters: list[tuple]) -> int:
+    """motion_clip_system_exclusions 를 count='exact' 로 집계(전량 fetch 없이 정확한 count).
+
+    PostgREST count=exact 는 data 페이지 상한과 무관하게 총 count 를 준다. raw 오류는 위생 처리.
+    """
+    try:
+        q = sb.table("motion_clip_system_exclusions").select("clip_id", count="exact")
+        for method, *args in filters:
+            q = getattr(q, method)(*args)
+        res = q.execute()
+    except Exception as e:  # noqa: BLE001 — 위생
+        raise ShortClipStoreError(f"aggregate query failed ({type(e).__name__})") from None
+    return int(getattr(res, "count", None) or 0)
+
+
+def aggregate_short_clip_daily(sb, *, now: datetime) -> dict[str, int]:
+    """KST 날짜 경계로 DB 에서 직접 집계(설계 §8). per-cycle stats 가 아니라 원장 상태 기준.
+
+    현재 상태 count(candidate/quarantined/deletion_blocked) + 그 날(KST) 이벤트(restored_at/
+    media_deleted_at 이 [day_start,day_end)) 를 센다. review_pending·blocked 는 deletion_blocked
+    현재 상태(검수 대기 = 삭제 보류), pending_delete 는 quarantined(7일 후 삭제 예정) 이다.
+    """
+    now_kst = now.astimezone(_KST)
+    day_start = datetime(now_kst.year, now_kst.month, now_kst.day, tzinfo=_KST)
+    day_end = day_start + timedelta(days=1)
+    ds, de = day_start.isoformat(), day_end.isoformat()
+
+    candidate = _count_exclusions(sb, [("eq", "state", "candidate")])
+    quarantined = _count_exclusions(sb, [("eq", "state", "quarantined")])
+    blocked = _count_exclusions(sb, [("eq", "state", "deletion_blocked")])
+    restored = _count_exclusions(
+        sb, [("eq", "state", "restored"), ("gte", "restored_at", ds), ("lt", "restored_at", de)]
+    )
+    deleted = _count_exclusions(
+        sb,
+        [("eq", "state", "media_deleted"), ("gte", "media_deleted_at", ds), ("lt", "media_deleted_at", de)],
+    )
+    return {
+        "candidate": candidate,
+        "quarantined": quarantined,
+        "review_pending": blocked,
+        "restored": restored,
+        "pending_delete": quarantined,
+        "deleted": deleted,
+        "blocked": blocked,
+    }
 
 
 def load_system_excluded_clip_ids(sb, clip_ids) -> set[str]:

@@ -66,7 +66,7 @@ HANDOFF_OK task=short-clip-retention-runtime repo=petcam-nightly-short-clip-work
 
 | 명령 | 결과 |
 |---|---|
-| `uv run pytest -q` (baseline 376) | **442 passed**(+66, skip 0) |
+| `uv run pytest -q` (baseline 376) | **452 passed**(+76, skip 0; P1 후속 +10 포함) |
 | `uv run python -m compileall -q reporter` | OK |
 | `bash -n install-launchd-short-clip-retention.sh` | OK |
 | `git diff --check` | clean |
@@ -118,8 +118,25 @@ pre-existing 실패 0(baseline 376 전부 green 유지). Gate editable 상대경
 
 ---
 
-## 8. 최종 판정
+## 8. P1 배포 전 후속 (2026-07-25, RED→GREEN)
+
+배포 전 최소 수정만 추가(commit 별도, 판정 유지). 전체 **452 passed**.
+
+| # | 요구 | 구현 | 회귀 테스트 |
+|---|---|---|---|
+| 1 | `_open_jobs_for_selector` stable pagination — 앞의 제외 수와 무관하게 뒤 eligible 을 limit 만큼 | 단일 `.in_(status)` + `.range` 페이지네이션으로 excluded 를 건너뛰며 limit eligible 확보(기존 job UPDATE/DELETE 0) | `제외 10 뒤 eligible 1, limit=1 → [job-ok]` + vlm_runtime queued_at/limit/recovery 계약 유지 |
+| 2 | R2 실패 뒤 fail RPC 가 false/error 면 audit divergence + cycle nonzero 중단(성공 보고 금지) | `run_delete_cycle`: fail 이 `StaleShortClipError` 면 `audit_divergence++` + break(무시하던 로직 제거) | R2 fail→fail-stale → divergence 1, 뒤 claim 미처리 |
+| 3 | Slack 은 per-cycle 이 아니라 **KST 날짜 경계 DB 집계** 값 사용 | `aggregate_short_clip_daily(sb, now)` — current-state count(candidate/quarantined/deletion_blocked) + 그날(KST) restored/deleted. worker 가 aggregate_fn 으로 카드 stats 구성 | KST 경계 count(어제 restored/deleted 제외) |
+| 4 | Slack 성공 후 complete false/error → worker nonzero, 전송 실패 때만 release | `maybe_send_slack`: post 실패=release, post 성공 후 complete false/error=`SlackCompleteDivergence`→run() nonzero(release 안 함) | complete false → rc=1, release 0 |
+| 5 | `reporter/slack.py` 실패 로그에 HTTP 오류 원문 금지 | `HTTPStatusError`→type+status code, 그 외 HTTPError→type 만(URL/token/response 미출력) | secret/URL 부재 + type/status 출력 |
+| 6 | malformed detection 로그에서 clip UUID prefix 제거 | `record_malformed type=…` 만(clip id 제거) | stderr 에 clip UUID(prefix 포함) 부재 |
+
+기존 결과 불변 유지: stable pagination 은 `clip_vlm_jobs` read+filter 만(update/delete 0). aggregate 는 `motion_clip_system_exclusions` count 조회만.
+
+---
+
+## 9. 최종 판정
 
 **`SHORT_CLIP_RETENTION_NIGHTLY_READY_FOR_DEPLOY_REVIEW`**
 
-Task 1~5 가 TDD RED→GREEN + 전체 442 passed + compileall/bash -n/diff-check + 금지-행위 정적 감사(metadata-only 감지 · exact delete · 기존 결과 불변 · 로그/Slack 위생 · secret/media 미추적)로 검증됐다. 삭제·Slack·설치는 switch 기본 비활성 + mock 으로만 실행됐고, migration/main/Mac mini/LaunchAgent/production DB/R2/Slack 은 무변경이다. 배포는 §7 게이트로 별도 승인 이후 진행한다.
+Task 1~5 + P1 후속(§8)이 TDD RED→GREEN + 전체 452 passed + compileall/bash -n/diff-check + 금지-행위 정적 감사(metadata-only 감지 · exact delete · 기존 결과 불변 · 로그/Slack 위생 · secret/media 미추적)로 검증됐다. 삭제·Slack·설치는 switch 기본 비활성 + mock 으로만 실행됐고, migration/main/Mac mini/LaunchAgent/production DB/R2/Slack 은 무변경이다. 배포는 §7 게이트로 별도 승인 이후 진행한다.

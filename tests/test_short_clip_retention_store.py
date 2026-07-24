@@ -9,6 +9,7 @@ import pytest
 from reporter.short_clip_retention_store import (
     ShortClipStoreError,
     StaleShortClipError,
+    aggregate_short_clip_daily,
     claim_media_deletions,
     claim_retention_notification,
     complete_media_delete,
@@ -19,7 +20,93 @@ from reporter.short_clip_retention_store import (
     release_retention_notification,
 )
 
-NOW = datetime(2026, 7, 25, 0, 0, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 7, 25, 0, 0, 0, tzinfo=timezone.utc)  # = 2026-07-25 09:00 KST
+
+
+class _CountResp:
+    def __init__(self, data):
+        self.data = data
+        self.count = len(data)
+
+    def execute(self):
+        return self
+
+
+class _CountQuery:
+    def __init__(self, rows):
+        self.rows = rows
+        self.f: list = []
+
+    def select(self, *cols, count=None):
+        return self
+
+    def eq(self, c, v):
+        self.f.append((c, "eq", v))
+        return self
+
+    def gte(self, c, v):
+        self.f.append((c, "gte", v))
+        return self
+
+    def lt(self, c, v):
+        self.f.append((c, "lt", v))
+        return self
+
+    def execute(self):
+        return _CountResp([r for r in self.rows if all(self._m(r, x) for x in self.f)])
+
+    def _m(self, r, f):
+        c, op, v = f
+        rv = r.get(c)
+        if op == "eq":
+            return rv == v
+        if op == "gte":
+            return rv is not None and rv >= v
+        return rv is not None and rv < v  # lt
+
+
+class _CountSB:
+    """count='exact' 를 지원하는 fake — motion_clip_system_exclusions 집계 검증용."""
+
+    def __init__(self, rows):
+        self.rows = rows
+
+    def table(self, _t):
+        return _CountQuery(self.rows)
+
+
+def test_aggregate_daily_uses_kst_day_boundary():
+    # KST 2026-07-25 [00:00,24:00) = UTC [2026-07-24T15:00, 2026-07-25T15:00).
+    rows = [
+        {"clip_id": "c1", "state": "candidate"},
+        {"clip_id": "c2", "state": "candidate"},
+        {"clip_id": "q1", "state": "quarantined"},
+        {"clip_id": "b1", "state": "deletion_blocked"},
+        # 오늘(KST) 복구 → 카운트, 어제 복구 → 제외.
+        {"clip_id": "r1", "state": "restored", "restored_at": "2026-07-25T02:00:00+00:00"},
+        {"clip_id": "r0", "state": "restored", "restored_at": "2026-07-24T10:00:00+00:00"},
+        # 오늘(KST) 삭제 → 카운트, 어제 삭제 → 제외.
+        {"clip_id": "d1", "state": "media_deleted", "media_deleted_at": "2026-07-25T03:00:00+00:00"},
+        {"clip_id": "d0", "state": "media_deleted", "media_deleted_at": "2026-07-24T08:00:00+00:00"},
+    ]
+    agg = aggregate_short_clip_daily(_CountSB(rows), now=NOW)
+    assert agg["candidate"] == 2
+    assert agg["quarantined"] == 1
+    assert agg["review_pending"] == 1        # deletion_blocked
+    assert agg["blocked"] == 1
+    assert agg["pending_delete"] == 1        # quarantined 대기
+    assert agg["restored"] == 1              # 오늘 KST 만
+    assert agg["deleted"] == 1               # 오늘 KST 만
+
+
+def test_aggregate_daily_db_error_hides_raw():
+    class _BoomSB:
+        def table(self, _t):
+            raise RuntimeError("password=hunter2")
+
+    with pytest.raises(ShortClipStoreError) as ei:
+        aggregate_short_clip_daily(_BoomSB(), now=NOW)
+    assert "hunter2" not in str(ei.value)
 
 
 class _Resp:

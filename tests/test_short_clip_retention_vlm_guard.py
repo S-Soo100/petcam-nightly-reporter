@@ -126,6 +126,49 @@ def test_open_jobs_stable_pagination_finds_eligible_behind_many_excluded():
     assert [r["id"] for r in rows] == ["job-ok"]  # 제외 10개 뒤 eligible 1개
 
 
+_SAME_TS = datetime(2026, 7, 20, 0, 30, 0, tzinfo=timezone.utc).isoformat()  # 동일 queued_at
+
+
+def _tsjob(job_id: str, clip_id: str, queued_at: str = _SAME_TS) -> dict:
+    return {
+        "id": job_id,
+        "clip_id": clip_id,
+        "selector_version": "budget-router-v1",
+        "status": "queued",
+        "window_start": datetime(2026, 7, 20, 0, 30, 0, tzinfo=timezone.utc).isoformat(),
+        "queued_at": queued_at,
+    }
+
+
+def test_open_jobs_keyset_duplicate_queued_at_across_page_boundary_no_dup_or_skip():
+    # 같은 queued_at 을 가진 job 이 페이지 경계를 걸쳐도 (queued_at ASC, id ASC) 복합 keyset 으로
+    # 중복·누락 없이 순회한다. page=2 로 강제해 4개 동률 job 이 2 페이지에 걸치게 한다.
+    jobs = [_tsjob("j-a", "a"), _tsjob("j-b", "b"), _tsjob("j-c", "c"), _tsjob("j-d", "d")]
+    sb = FakeSB({"clip_vlm_jobs": jobs})
+    before = datetime(2026, 7, 20, 2, 0, 0, tzinfo=timezone.utc)
+    rows = _open_jobs_for_selector(sb, "budget-router-v1", before=before, limit=4, page=2)
+    ids = [r["id"] for r in rows]
+    assert ids == ["j-a", "j-b", "j-c", "j-d"]  # (queued_at,id) 순, 중복/누락 0
+    assert len(ids) == len(set(ids))
+
+
+def test_open_jobs_keyset_excluded_across_boundary_finds_eligible():
+    # 동률 queued_at 5개 중 a,c 격리 → page=2, limit=2 여도 뒤 eligible(b,d)을 경계 넘어 찾는다.
+    jobs = [_tsjob(f"j-{c}", c) for c in ("a", "b", "c", "d", "e")]
+    sb = FakeSB(
+        {
+            "clip_vlm_jobs": jobs,
+            "motion_clip_system_exclusions": [
+                {"clip_id": "a", "state": "quarantined"},
+                {"clip_id": "c", "state": "media_deleted"},
+            ],
+        }
+    )
+    before = datetime(2026, 7, 20, 2, 0, 0, tzinfo=timezone.utc)
+    rows = _open_jobs_for_selector(sb, "budget-router-v1", before=before, limit=2, page=2)
+    assert [r["id"] for r in rows] == ["j-b", "j-d"]  # a/c 제외, 경계 넘어 중복/누락 0
+
+
 def test_open_jobs_does_not_mutate_existing_rows():
     jobs = [_job("a"), _job("b")]
     sb = FakeSB(

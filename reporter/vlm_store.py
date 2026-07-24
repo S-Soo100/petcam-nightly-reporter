@@ -76,31 +76,46 @@ def load_due_jobs_for_selector(sb,selector_version,start=None,end=None,limit=64)
         rows+=q.order("queued_at").limit(limit).execute().data
     return rows[:limit]
 
-_JOB_PAGE=100        # bounded keyset 페이지 크기(짧은 영상 제외가 앞을 많이 차지해도 뒤 eligible 확보).
-_JOB_MAX_PAGES=200   # 무한 루프 backstop(최대 20000행 스캔).
+_JOB_PAGE=100        # keyset 페이지 크기(짧은 영상 제외가 앞을 많이 차지해도 뒤 eligible 확보).
+_JOB_MAX_PAGES=200   # 무한 루프 backstop.
 
-def _open_jobs_for_selector(sb,selector_version,*,start=None,end=None,before=None,limit=4):
-    """같은 selector 의 queued|failed_retryable 을 queued_at 오름차순 stable 로 조회.
+def _open_jobs_for_selector(sb,selector_version,*,start=None,end=None,before=None,limit=4,page=_JOB_PAGE):
+    """같은 selector 의 queued|failed_retryable 을 (queued_at ASC, id ASC) 복합 keyset 으로 조회.
+
+    queued_at 만으로는 동률 행 순서가 비결정적이라 offset 페이지네이션이 경계에서 중복/누락된다
+    (production 실측: 689행 중 495행이 duplicate timestamp, max 동률 4). id 를 tiebreak 로 더해
+    다음 페이지 조건을 `queued_at > last_queued_at OR (queued_at = last_queued_at AND id > last_id)`
+    로 둔다(= (queued_at,id) 튜플 strict 비교). offset range 는 쓰지 않는다.
 
     짧은 영상 자동 제외(설계 §6): quarantined/media_deleted clip 의 job 은 건너뛴다. **앞의 제외 job
-    수와 무관하게 뒤의 eligible job 을 limit 만큼** 채우도록 range 로 페이지네이션한다(under-fill 방지).
-    기존 clip_vlm_jobs row 는 읽기만 하고 update/delete 하지 않는다.
+    수와 무관하게 뒤의 eligible job 을 limit 만큼** 채운다. 기존 clip_vlm_jobs row 는 읽기만 한다
+    (update/delete 0).
     """
-    page=max(_JOB_PAGE,limit)
+    page=max(page,1)
     eligible=[]
-    for p in range(_JOB_MAX_PAGES):
+    last_qa=None  # 직전 페이지 마지막 행의 queued_at
+    last_id=None  # 직전 페이지 마지막 행의 id (동률 tiebreak)
+    for _ in range(_JOB_MAX_PAGES):
         q=sb.table("clip_vlm_jobs").select("*").eq("selector_version",selector_version).in_("status",["queued","failed_retryable"])
         if start is not None:q=q.gte("window_start",start.isoformat())   # inclusive
         if end is not None:q=q.lt("window_start",end.isoformat())        # exclusive
         if before is not None:q=q.lt("window_start",before.isoformat())  # current window_start exclusive
-        batch=q.order("queued_at").range(p*page,p*page+page-1).execute().data
-        if not batch:break
+        if last_qa is not None:q=q.gte("queued_at",last_qa)              # keyset 하한(동률 id 는 아래 strict)
+        rows=q.order("queued_at").execute().data
+        # 복합 정렬 (queued_at ASC, id ASC): 동률 queued_at 을 id 로 안정 tiebreak.
+        rows=sorted(rows,key=lambda r:(r.get("queued_at") or "",r.get("id") or ""))
+        if last_qa is not None:
+            # 다음 페이지 조건: queued_at > last_qa OR (queued_at = last_qa AND id > last_id).
+            rows=[r for r in rows if (r.get("queued_at") or "",r.get("id") or "")>(last_qa,last_id)]
+        if not rows:break
+        batch=rows[:page]
         excluded=load_system_excluded_clip_ids(sb,[r.get("clip_id") for r in batch])
         for r in batch:
             if r.get("clip_id") not in excluded:
                 eligible.append(r)
                 if len(eligible)>=limit:return eligible[:limit]
-        if len(batch)<page:break  # 마지막 페이지
+        last=batch[-1];last_qa=last.get("queued_at") or "";last_id=last.get("id") or ""
+        if len(batch)>=len(rows):break  # 이번 fetch 를 다 소비 = 더 없음
     return eligible[:limit]
 
 def load_due_jobs_for_selector_window(sb,selector_version,start,end,limit=4):

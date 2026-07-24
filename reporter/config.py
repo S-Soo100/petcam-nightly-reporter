@@ -109,3 +109,32 @@ VLM_RESERVED_COST_USD = Decimal(os.environ.get("VLM_RESERVED_COST_USD", "0.10"))
 VLM_MAX_PER_CAMERA_WINDOW = 4
 VLM_MAX_PER_CAMERA_NIGHT = 16
 VLM_MAX_PER_NIGHT = 64
+
+# ── 짧은 영상 장치 오류 격리·보존 worker (short_clip_retention_worker) ──
+# 메타데이터 전용 감지 + 7일 보존 후 exact R2 삭제. 감지/쓰기/삭제 독립 switch, 기본 전부 비활성.
+# EXPECTED_HOST 는 검증된 Mac mini hostname(자동 승인 금지) — enabled 실행 시 host guard 가 lock/DB/
+# R2/Slack 이전에 fail-closed 한다. BATCH_LIMIT [1,200], DELETE_LIMIT [1,30] clamp.
+SHORT_CLIP_RETENTION_ENABLED = os.environ.get("SHORT_CLIP_RETENTION_ENABLED", "0") == "1"
+SHORT_CLIP_RETENTION_WRITE_ENABLED = (
+    os.environ.get("SHORT_CLIP_RETENTION_WRITE_ENABLED", "0") == "1"
+)
+SHORT_CLIP_RETENTION_DELETE_ENABLED = (
+    os.environ.get("SHORT_CLIP_RETENTION_DELETE_ENABLED", "0") == "1"
+)
+SHORT_CLIP_RETENTION_EXPECTED_HOST = os.environ.get(
+    "SHORT_CLIP_RETENTION_EXPECTED_HOST", ""
+)
+SHORT_CLIP_RETENTION_BATCH_LIMIT = min(
+    max(int(os.environ.get("SHORT_CLIP_RETENTION_BATCH_LIMIT", "100")), 1), 200
+)
+SHORT_CLIP_RETENTION_DELETE_LIMIT = min(
+    max(int(os.environ.get("SHORT_CLIP_RETENTION_DELETE_LIMIT", "30")), 1), 30
+)
+# candidate 후보 임계(초). DB 정책이 정본이지만 worker 가 후보 목록 RPC 에 넘길 상한. 15초 미만.
+SHORT_CLIP_RETENTION_CANDIDATE_UNDER_SEC = float(
+    os.environ.get("SHORT_CLIP_RETENTION_CANDIDATE_UNDER_SEC", "15")
+)
+# 일일 Slack 카드 KST 리포트 시각(이 시각 이후 사이클에서만 1회 전송). 기본 09시.
+SHORT_CLIP_RETENTION_REPORT_HOUR_KST = int(
+    os.environ.get("SHORT_CLIP_RETENTION_REPORT_HOUR_KST", "9")
+)

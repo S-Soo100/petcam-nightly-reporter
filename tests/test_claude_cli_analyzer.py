@@ -86,6 +86,23 @@ def test_cli_batch_rejects_auth_error_model_mismatch_and_clip_set(tmp_path):
         analyze_batch(frames, "claude-sonnet-5", runner=response(logged_out))
     assert caught.value.code == "not_logged_in"
 
+    with pytest.raises(CliBatchError, match="not_logged_in") as caught:
+        analyze_batch(frames, "claude-sonnet-5", runner=response(logged_out, returncode=1))
+    assert caught.value.disposition == "breaker"
+
+    structured_error = _envelope([], is_error=True)
+    with pytest.raises(CliBatchError, match="quota_exceeded") as caught:
+        analyze_batch(
+            frames,
+            "claude-sonnet-5",
+            runner=lambda *_args, **_kwargs: SimpleNamespace(
+                returncode=1,
+                stdout=json.dumps(structured_error),
+                stderr="Session limit reached",
+            ),
+        )
+    assert caught.value.disposition == "breaker"
+
     max_turns = _envelope([], is_error=True)
     max_turns.update({"subtype": "error_max_turns", "terminal_reason": "max_turns"})
     with pytest.raises(CliBatchError, match="max_turns_exceeded") as caught:
@@ -99,6 +116,20 @@ def test_cli_batch_rejects_auth_error_model_mismatch_and_clip_set(tmp_path):
 
     with pytest.raises(CliBatchError, match="clip_set_mismatch"):
         analyze_batch(frames, "claude-sonnet-5", runner=response(_envelope(items)))
+
+
+def test_cli_batch_classifies_rc1_structured_max_turns_without_retry(tmp_path):
+    envelope = _envelope([], is_error=True)
+    envelope.update({"subtype": "error_max_turns", "terminal_reason": "max_turns"})
+
+    def max_turns(*_args, **_kwargs):
+        return SimpleNamespace(returncode=1, stdout=json.dumps(envelope), stderr="")
+
+    with pytest.raises(CliBatchError, match="max_turns_exceeded") as caught:
+        analyze_batch(_frames(tmp_path), "claude-sonnet-5", runner=max_turns)
+
+    assert caught.value.code == "max_turns_exceeded"
+    assert caught.value.disposition == "no_retry"
 
 
 def test_cli_batch_requires_one_to_four_clips_and_six_frames(tmp_path):

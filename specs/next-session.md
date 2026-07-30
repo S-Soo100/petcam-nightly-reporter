@@ -2,6 +2,7 @@
 
 > 정본: `docs/superpowers/plans/2026-07-16-vlm-single-host-operations-hardening.md` + `specs/2026-07-16-vlm-single-host-operations-hardening-design.md`
 > Slack 운영 개편: `docs/superpowers/plans/2026-07-16-vlm-slack-operations-cleanup.md` · 감사: `reports/vlm-backfill-progress-20260716/REPORT.md`
+> **🟡 2026-07-30 Claude CLI structured error 분류 수정 준비:** 2026-07-29 17:00 UTC window의 4건은 rc=1이면서 유효한 `error_max_turns` JSON envelope였지만 `analyze_batch`가 stdout parse보다 nonzero rc를 먼저 처리해 `cli_rc_1/retryable`로 오분류했다. rc1+structured max-turns RED를 추가하고 envelope-first 최소 수정으로 `max_turns_exceeded/no_retry` GREEN, plain rc1 retryable 유지, 관련 104·전체 455 tests 통과. provider 호출 0. 현재 launchd는 runs 4/last exit 0이나 local VLM log가 없어 4건의 22:00 이후 개별 회복은 production DB를 조회하지 않고는 확정할 수 없어 `회복 미확정`으로 보존한다. 코드·service는 아직 미배포. 상세 [`structured error report`](../docs/handoff-prompts/2026-07-30-vlm-cli-structured-error-classification-report.md).
 
 ## activity-worker 단일 호스트 이전 (2026-07-16, VERIFIED)
 

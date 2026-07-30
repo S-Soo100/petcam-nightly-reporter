@@ -254,6 +254,26 @@ def analyze_batch(frame_sets, model, *, runner=subprocess.run) -> CliBatchResult
             diagnostic=_build_diagnostic(type(exc).__name__, "spawn", stderr=str(exc)),
             disposition="breaker",
         ) from exc
+    try:
+        envelope = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        if completed.returncode == 0:
+            raise _fail("provider_error: invalid_envelope", stdout=completed.stdout or "") from exc
+        envelope = None
+    if isinstance(envelope, dict) and envelope.get("is_error"):
+        result_text = str(envelope.get("result") or "")
+        failure_code = _safe_failure_code(f"{result_text}\n{completed.stderr or ''}")
+        if not failure_code and (
+            envelope.get("subtype") == "error_max_turns"
+            or envelope.get("terminal_reason") == "max_turns"
+        ):
+            failure_code = "max_turns_exceeded"
+        raise _fail(
+            failure_code or "provider_error: claude_cli_error",
+            exit_code=completed.returncode or None,
+            stdout=completed.stdout or "",
+            stderr=completed.stderr or "",
+        )
     if completed.returncode != 0:
         blob = f"{completed.stdout}\n{completed.stderr}"
         safe_code = _safe_failure_code(blob)
@@ -261,18 +281,6 @@ def analyze_batch(frame_sets, model, *, runner=subprocess.run) -> CliBatchResult
             raise _fail(safe_code, exit_code=completed.returncode, stdout=completed.stdout or "", stderr=completed.stderr or "")
         raise _fail(f"provider_error: cli_rc_{completed.returncode}", exit_code=completed.returncode,
                     stdout=completed.stdout or "", stderr=completed.stderr or "")
-    try:
-        envelope = json.loads(completed.stdout)
-    except json.JSONDecodeError as exc:
-        raise _fail("provider_error: invalid_envelope", stdout=completed.stdout or "") from exc
-    if envelope.get("is_error"):
-        result_text = str(envelope.get("result") or "")
-        safe_code = _safe_failure_code(result_text)
-        if safe_code:
-            raise _fail(safe_code, stderr=result_text)
-        if envelope.get("subtype") == "error_max_turns" or envelope.get("terminal_reason") == "max_turns":
-            raise _fail("max_turns_exceeded", stderr=result_text)
-        raise _fail("provider_error: claude_cli_error", stderr=result_text)
     usage_map = envelope.get("modelUsage") or {}
     if not usage_map:
         raise _fail("provider_error: missing_model_usage")

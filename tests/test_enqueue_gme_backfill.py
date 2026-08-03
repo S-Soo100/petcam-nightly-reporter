@@ -4,6 +4,7 @@ from scripts.enqueue_gme_backfill import (
     BACKFILL_START,
     MAX_BACKFILL_LIMIT,
     _load_motion_page,
+    enqueue_batches,
     is_eligible_metadata,
 )
 
@@ -70,3 +71,31 @@ def test_motion_page_uses_id_keyset_after_fixed_start():
 
 def test_backfill_limit_covers_current_full_corpus():
     assert MAX_BACKFILL_LIMIT == 50_000
+
+
+class _RpcResult:
+    def __init__(self, value):
+        self.data = value
+
+    def execute(self):
+        return self
+
+
+class _RpcClient:
+    def __init__(self):
+        self.calls = []
+
+    def rpc(self, name, args):
+        self.calls.append((name, args))
+        return _RpcResult(len(args["p_clip_ids"]))
+
+
+def test_backfill_enqueues_each_keyset_page_as_bounded_rpc():
+    client = _RpcClient()
+    selected, enqueued = enqueue_batches(
+        client,
+        [[_row(id="clip-1"), _row(id="clip-2")], [_row(id="clip-3")]],
+        apply=True,
+    )
+    assert (selected, enqueued) == (3, 3)
+    assert [len(args["p_clip_ids"]) for _, args in client.calls] == [2, 1]

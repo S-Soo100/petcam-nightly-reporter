@@ -54,28 +54,38 @@ def _load_motion_page(sb, *, after_id: str | None, page_size: int) -> list[dict]
     return query.execute().data or []
 
 
-def load_eligible(sb, *, limit: int, page_size: int = 500, r2_client=None) -> list[dict]:
+def iter_eligible_batches(sb, *, limit: int, page_size: int = 500, r2_client=None):
     if limit < 1 or limit > MAX_BACKFILL_LIMIT:
         raise ValueError(f"limit must be 1..{MAX_BACKFILL_LIMIT}")
     client = r2_client or r2.get_r2_client()
-    selected: list[dict] = []
+    selected_count = 0
     after_id = None
-    while len(selected) < limit:
+    while selected_count < limit:
         rows = _load_motion_page(sb, after_id=after_id, page_size=page_size)
         if not rows:
             break
         ids = [row["id"] for row in rows]
         exclusions = _state_map(sb, "motion_clip_system_exclusions", ids)
         cleanup = _state_map(sb, "rba_owner_media_cleanup_items", ids)
+        eligible_page = []
         for row in rows:
             if is_eligible_metadata(row, exclusion_state=exclusions.get(row["id"]), cleanup_state=cleanup.get(row["id"])):
                 if r2_object_exists(client, bucket=config.R2_BUCKET, key=row["r2_key"]):
-                    selected.append(row)
-                    if len(selected) >= limit:
+                    eligible_page.append(row)
+                    selected_count += 1
+                    if selected_count >= limit:
                         break
+        if eligible_page:
+            yield eligible_page
         after_id = rows[-1]["id"]
         if len(rows) < page_size:
             break
+
+
+def load_eligible(sb, *, limit: int, page_size: int = 500, r2_client=None) -> list[dict]:
+    selected = []
+    for batch in iter_eligible_batches(sb, limit=limit, page_size=page_size, r2_client=r2_client):
+        selected.extend(batch)
     return selected
 
 
@@ -91,15 +101,28 @@ def enqueue(sb, clip_ids: list[str], *, source: str, priority: int, apply: bool)
     return int(data or 0)
 
 
+def enqueue_batches(sb, batches, *, apply: bool) -> tuple[int, int]:
+    selected = 0
+    enqueued = 0
+    for rows in batches:
+        clip_ids = [row["id"] for row in rows]
+        selected += len(clip_ids)
+        enqueued += enqueue(sb, clip_ids, source="historical", priority=10, apply=apply)
+    return selected, enqueued
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="GME eligible historical backfill enqueuer")
     parser.add_argument("--limit", type=int, required=True)
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args(argv)
     sb = create_client(config.SUPABASE_URL, config.SUPABASE_KEY)
-    rows = load_eligible(sb, limit=args.limit)
-    count = enqueue(sb, [row["id"] for row in rows], source="historical", priority=10, apply=args.apply)
-    print(f"[gme-backfill] eligible={len(rows)} enqueued={count} apply={int(args.apply)}")
+    selected, count = enqueue_batches(
+        sb,
+        iter_eligible_batches(sb, limit=args.limit),
+        apply=args.apply,
+    )
+    print(f"[gme-backfill] eligible={selected} enqueued={count} apply={int(args.apply)}")
     return 0
 
 

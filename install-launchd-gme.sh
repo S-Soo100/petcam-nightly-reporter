@@ -6,6 +6,7 @@ LABEL="com.petcam.gme-worker"
 INTERVAL_SEC="${GME_INTERVAL_SEC:-60}"
 ENABLE="${GME_ENABLED:-0}"
 EXPECTED_HOST="${GME_EXPECTED_HOST:-}"
+BATCH_LIMIT="${GME_BATCH_LIMIT:-4}"
 ACTUAL_HOST="$(hostname)"
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -13,6 +14,10 @@ REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 [ -n "$EXPECTED_HOST" ] || { echo "GME_EXPECTED_HOST required" >&2; exit 1; }
 [ "$ACTUAL_HOST" = "$EXPECTED_HOST" ] || { echo "hostname mismatch" >&2; exit 1; }
 [ "$INTERVAL_SEC" = "60" ] || { echo "GME_INTERVAL_SEC must be 60" >&2; exit 1; }
+[[ "$BATCH_LIMIT" =~ ^[0-9]+$ ]] && [ "$BATCH_LIMIT" -ge 1 ] && [ "$BATCH_LIMIT" -le 50 ] || {
+  echo "GME_BATCH_LIMIT must be 1..50" >&2
+  exit 1
+}
 
 UV_BIN="$(command -v uv || true)"
 [ -n "$UV_BIN" ] || { echo "uv missing" >&2; exit 1; }
@@ -37,6 +42,7 @@ cat > "$PLIST" <<PLIST
     <key>PATH</key><string>$(dirname "$UV_BIN"):/usr/bin:/bin</string>
     <key>GME_ENABLED</key><string>1</string>
     <key>GME_EXPECTED_HOST</key><string>$EXPECTED_HOST</string>
+    <key>GME_BATCH_LIMIT</key><string>$BATCH_LIMIT</string>
   </dict>
 </dict></plist>
 PLIST

@@ -38,11 +38,24 @@ def test_installer_is_fail_closed_and_uses_60_second_one_shot(tmp_path):
     bad, home = _run(tmp_path / "bad", {"GME_ENABLED": "0", "GME_EXPECTED_HOST": HOST})
     assert bad.returncode != 0
     assert not list(home.rglob("*.plist"))
-    good, home = _run(tmp_path / "good", {"GME_ENABLED": "1", "GME_EXPECTED_HOST": HOST})
+    good, home = _run(
+        tmp_path / "good",
+        {"GME_ENABLED": "1", "GME_EXPECTED_HOST": HOST, "GME_BATCH_LIMIT": "10"},
+    )
     assert good.returncode == 0, good.stderr
     text = next(home.rglob("*.plist")).read_text()
     assert "com.petcam.gme-worker" in text
     assert "reporter.gme_worker" in text
     assert "<integer>60</integer>" in text
+    assert "<key>GME_BATCH_LIMIT</key><string>10</string>" in text
     assert "WorkingDirectory" in text
     assert "SUPABASE" not in text and "R2_SECRET" not in text
+
+
+def test_installer_rejects_out_of_range_batch_limit(tmp_path):
+    result, home = _run(
+        tmp_path / "bad-batch",
+        {"GME_ENABLED": "1", "GME_EXPECTED_HOST": HOST, "GME_BATCH_LIMIT": "51"},
+    )
+    assert result.returncode != 0
+    assert not list(home.rglob("*.plist"))

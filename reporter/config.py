@@ -81,6 +81,19 @@ PYTHON_EVIDENCE_GATE_THRESHOLD = float(os.environ.get("PYTHON_EVIDENCE_GATE_THRE
 # terminal decode_insufficient_frames 로 처리한다(설계 §7.1).
 PYTHON_EVIDENCE_MIN_FRAMES = int(os.environ.get("PYTHON_EVIDENCE_MIN_FRAMES", "6"))
 
+# --- Gecko Motion Engine production shadow ---
+# 기존 Python Evidence와 독립된 직접 교체 worker. 기본 비활성 + exact host guard로 fail-closed.
+GME_ENABLED = os.environ.get("GME_ENABLED", "0") == "1"
+GME_EXPECTED_HOST = os.environ.get("GME_EXPECTED_HOST", "")
+GME_BATCH_LIMIT = min(max(int(os.environ.get("GME_BATCH_LIMIT", "4")), 1), 50)
+GME_MAX_LIVE_LAG_SEC = float(os.environ.get("GME_MAX_LIVE_LAG_SEC", "900"))
+GME_GATE_THRESHOLD = float(os.environ.get("GME_GATE_THRESHOLD", "0.5"))
+GME_ANALYSIS_FPS = min(max(float(os.environ.get("GME_ANALYSIS_FPS", "30")), 1.0), 30.0)
+GME_ANCHOR_INTERVAL_SEC = float(os.environ.get("GME_ANCHOR_INTERVAL_SEC", "0.5"))
+GME_CHECKPOINT_PATH = os.environ.get("GME_CHECKPOINT_PATH", GATE_CHECKPOINT_PATH)
+GME_PERMANENT_PREFIX = "terra-derived/gme/v1/permanent/"
+GME_DEBUG_PREFIX = "terra-derived/gme/v1/debug-14d/"
+
 # --- camera_clips 라벨링 격리 제안 worker — 기본은 완전 비활성/쓰기 금지 ---
 LABELING_TRIAGE_ENABLED = os.environ.get("LABELING_TRIAGE_ENABLED", "0") == "1"
 LABELING_TRIAGE_WRITE_ENABLED = os.environ.get("LABELING_TRIAGE_WRITE_ENABLED", "0") == "1"

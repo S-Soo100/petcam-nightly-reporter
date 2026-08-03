@@ -13,6 +13,7 @@ from supabase import create_client
 from reporter import config, r2
 
 BACKFILL_START = datetime(2026, 7, 14, 15, 0, tzinfo=timezone.utc)  # KST 07-15 00:00
+MAX_BACKFILL_LIMIT = 50_000
 ENGINE_SCHEMA_VERSION = "gme-shadow-v1"
 ALGORITHM_VERSION = "gme-motion-v0"
 DETECTOR_IDENTITY = "7997e853e851ac6592e03d13e7d5098ebfcbcb49b408077d83d7d6359df60a2a"
@@ -43,18 +44,24 @@ def r2_object_exists(client, *, bucket: str, key: str) -> bool:
         return False
 
 
+def _load_motion_page(sb, *, after_id: str | None, page_size: int) -> list[dict]:
+    query = (
+        sb.table("motion_clips").select("id,camera_id,started_at,r2_key")
+        .gte("started_at", BACKFILL_START.isoformat()).order("id").limit(page_size)
+    )
+    if after_id is not None:
+        query = query.gt("id", after_id)
+    return query.execute().data or []
+
+
 def load_eligible(sb, *, limit: int, page_size: int = 500, r2_client=None) -> list[dict]:
-    if limit < 1 or limit > 5000:
-        raise ValueError("limit must be 1..5000")
+    if limit < 1 or limit > MAX_BACKFILL_LIMIT:
+        raise ValueError(f"limit must be 1..{MAX_BACKFILL_LIMIT}")
     client = r2_client or r2.get_r2_client()
     selected: list[dict] = []
-    offset = 0
+    after_id = None
     while len(selected) < limit:
-        rows = (
-            sb.table("motion_clips").select("id,camera_id,started_at,r2_key")
-            .gte("started_at", BACKFILL_START.isoformat()).order("started_at").order("id")
-            .range(offset, offset + page_size - 1).execute().data or []
-        )
+        rows = _load_motion_page(sb, after_id=after_id, page_size=page_size)
         if not rows:
             break
         ids = [row["id"] for row in rows]
@@ -66,7 +73,7 @@ def load_eligible(sb, *, limit: int, page_size: int = 500, r2_client=None) -> li
                     selected.append(row)
                     if len(selected) >= limit:
                         break
-        offset += len(rows)
+        after_id = rows[-1]["id"]
         if len(rows) < page_size:
             break
     return selected

@@ -39,7 +39,10 @@ def main(argv=None) -> int:
     if len(selected) != 10:
         print(f"[gme-smoke] preflight failed eligible={len(selected)}/10")
         return 2
-    count = enqueue(sb, [row["id"] for row in selected], source="smoke", priority=90, apply=args.apply)
+    count = enqueue(
+        sb, [row["id"] for row in selected], source="smoke", priority=90, apply=args.apply,
+        detector_identity=config.GME_CHECKPOINT_SHA256,
+    )
     print(f"[gme-smoke] selected=10 enqueued={count} apply={int(args.apply)}")
     return 0
 

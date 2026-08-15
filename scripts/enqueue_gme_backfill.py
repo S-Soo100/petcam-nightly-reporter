@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from datetime import datetime, timezone
 
 from supabase import create_client
@@ -16,7 +17,6 @@ BACKFILL_START = datetime(2026, 7, 14, 15, 0, tzinfo=timezone.utc)  # KST 07-15 
 MAX_BACKFILL_LIMIT = 50_000
 ENGINE_SCHEMA_VERSION = "gme-shadow-v1"
 ALGORITHM_VERSION = "gme-motion-v0"
-DETECTOR_IDENTITY = "7997e853e851ac6592e03d13e7d5098ebfcbcb49b408077d83d7d6359df60a2a"
 EXCLUDED_SYSTEM_STATES = frozenset({"quarantined", "media_deleted"})
 EXCLUDED_CLEANUP_STATES = frozenset({"quarantined", "media_deleted", "source_missing"})
 
@@ -24,6 +24,7 @@ EXCLUDED_CLEANUP_STATES = frozenset({"quarantined", "media_deleted", "source_mis
 def is_eligible_metadata(row: dict, *, exclusion_state: str | None, cleanup_state: str | None) -> bool:
     return bool(
         row.get("id") and row.get("camera_id") and row.get("started_at") and row.get("r2_key")
+        and row.get("clip_purpose") == "production"
         and exclusion_state not in EXCLUDED_SYSTEM_STATES
         and cleanup_state not in EXCLUDED_CLEANUP_STATES
     )
@@ -46,7 +47,7 @@ def r2_object_exists(client, *, bucket: str, key: str) -> bool:
 
 def _load_motion_page(sb, *, after_id: str | None, page_size: int) -> list[dict]:
     query = (
-        sb.table("motion_clips").select("id,camera_id,started_at,r2_key")
+        sb.table("motion_clips").select("id,camera_id,started_at,r2_key,clip_purpose")
         .gte("started_at", BACKFILL_START.isoformat()).order("id").limit(page_size)
     )
     if after_id is not None:
@@ -89,25 +90,33 @@ def load_eligible(sb, *, limit: int, page_size: int = 500, r2_client=None) -> li
     return selected
 
 
-def enqueue(sb, clip_ids: list[str], *, source: str, priority: int, apply: bool) -> int:
+def enqueue(
+    sb, clip_ids: list[str], *, source: str, priority: int, apply: bool,
+    detector_identity: str,
+) -> int:
+    if re.fullmatch(r"[0-9a-f]{64}", detector_identity) is None:
+        raise ValueError("detector identity must be a lowercase SHA-256")
     unique = list(dict.fromkeys(clip_ids))
     if not apply or not unique:
         return 0
     data = sb.rpc("fn_enqueue_gme_jobs", {
         "p_clip_ids": unique, "p_source": source, "p_priority": priority,
         "p_engine_schema_version": ENGINE_SCHEMA_VERSION, "p_algorithm_version": ALGORITHM_VERSION,
-        "p_detector_identity": DETECTOR_IDENTITY,
+        "p_detector_identity": detector_identity,
     }).execute().data
     return int(data or 0)
 
 
-def enqueue_batches(sb, batches, *, apply: bool) -> tuple[int, int]:
+def enqueue_batches(sb, batches, *, apply: bool, detector_identity: str) -> tuple[int, int]:
     selected = 0
     enqueued = 0
     for rows in batches:
         clip_ids = [row["id"] for row in rows]
         selected += len(clip_ids)
-        enqueued += enqueue(sb, clip_ids, source="historical", priority=10, apply=apply)
+        enqueued += enqueue(
+            sb, clip_ids, source="historical", priority=10, apply=apply,
+            detector_identity=detector_identity,
+        )
     return selected, enqueued
 
 
@@ -121,6 +130,7 @@ def main(argv=None) -> int:
         sb,
         iter_eligible_batches(sb, limit=args.limit),
         apply=args.apply,
+        detector_identity=config.GME_CHECKPOINT_SHA256,
     )
     print(f"[gme-backfill] eligible={selected} enqueued={count} apply={int(args.apply)}")
     return 0

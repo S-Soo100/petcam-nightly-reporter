@@ -41,7 +41,7 @@ def main(argv=None) -> int:
         return 2
     count = enqueue(
         sb, [row["id"] for row in selected], source="smoke", priority=90, apply=args.apply,
-        detector_identity=config.GME_CHECKPOINT_SHA256,
+        detector_identity=config.GME_DETECTOR_IDENTITY,
     )
     print(f"[gme-smoke] selected=10 enqueued={count} apply={int(args.apply)}")
     return 0

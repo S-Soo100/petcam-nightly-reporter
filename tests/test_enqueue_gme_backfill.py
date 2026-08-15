@@ -12,7 +12,7 @@ from scripts.enqueue_gme_backfill import (
 )
 
 
-V25_SHA = "2b128f105e898bc472ed66861583ab80007dae6e94b291db497d7a2f8081f84a"
+V25_IDENTITY = "d4654168af21d26697ab1bd9a5dc4a05bd92baf5c9328800915cc347803d05b6"
 
 
 def _row(**changes):
@@ -108,11 +108,11 @@ def test_backfill_enqueues_each_keyset_page_as_bounded_rpc():
         client,
         [[_row(id="clip-1"), _row(id="clip-2")], [_row(id="clip-3")]],
         apply=True,
-        detector_identity=V25_SHA,
+        detector_identity=V25_IDENTITY,
     )
     assert (selected, enqueued) == (3, 3)
     assert [len(args["p_clip_ids"]) for _, args in client.calls] == [2, 1]
-    assert {args["p_detector_identity"] for _, args in client.calls} == {V25_SHA}
+    assert {args["p_detector_identity"] for _, args in client.calls} == {V25_IDENTITY}
 
 
 def test_enqueue_rejects_non_sha_detector_identity_before_rpc():

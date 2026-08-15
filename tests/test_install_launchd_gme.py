@@ -8,6 +8,7 @@ from pathlib import Path
 SCRIPT = Path(__file__).resolve().parent.parent / "install-launchd-gme.sh"
 HOST = "petcam-macmini.local"
 V25_SHA = "2b128f105e898bc472ed66861583ab80007dae6e94b291db497d7a2f8081f84a"
+V25_IDENTITY = "d4654168af21d26697ab1bd9a5dc4a05bd92baf5c9328800915cc347803d05b6"
 
 
 def _v25_env():
@@ -18,6 +19,7 @@ def _v25_env():
         "GME_DETECTOR_BACKEND": "yolo26n",
         "GME_CHECKPOINT_PATH": "/private/models/yolo26n-v25-best.pt",
         "GME_CHECKPOINT_SHA256": V25_SHA,
+        "GME_DETECTOR_IDENTITY": V25_IDENTITY,
         "GME_RAW_CONFIDENCE": "0.001",
         "GME_SCORE_THRESHOLD": "0.20",
         "GME_IMAGE_SIZE": "960",
@@ -68,6 +70,7 @@ def test_installer_is_fail_closed_and_uses_60_second_one_shot(tmp_path):
     assert "<key>GME_BATCH_LIMIT</key><string>10</string>" in text
     assert "<key>GME_DETECTOR_BACKEND</key><string>yolo26n</string>" in text
     assert f"<key>GME_CHECKPOINT_SHA256</key><string>{V25_SHA}</string>" in text
+    assert f"<key>GME_DETECTOR_IDENTITY</key><string>{V25_IDENTITY}</string>" in text
     assert "<key>GME_RAW_CONFIDENCE</key><string>0.001</string>" in text
     assert "<key>GME_SCORE_THRESHOLD</key><string>0.20</string>" in text
     assert "<key>GME_IMAGE_SIZE</key><string>960</string>" in text
@@ -91,5 +94,13 @@ def test_installer_rejects_missing_checkpoint_sha(tmp_path):
     env = _v25_env()
     del env["GME_CHECKPOINT_SHA256"]
     result, home = _run(tmp_path / "missing-sha", env)
+    assert result.returncode != 0
+    assert not list(home.rglob("*.plist"))
+
+
+def test_installer_rejects_missing_detector_identity(tmp_path):
+    env = _v25_env()
+    del env["GME_DETECTOR_IDENTITY"]
+    result, home = _run(tmp_path / "missing-identity", env)
     assert result.returncode != 0
     assert not list(home.rglob("*.plist"))

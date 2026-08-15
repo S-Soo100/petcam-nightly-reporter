@@ -10,6 +10,7 @@ BATCH_LIMIT="${GME_BATCH_LIMIT:-4}"
 DETECTOR_BACKEND="${GME_DETECTOR_BACKEND:-}"
 CHECKPOINT_PATH="${GME_CHECKPOINT_PATH:-}"
 CHECKPOINT_SHA256="${GME_CHECKPOINT_SHA256:-}"
+DETECTOR_IDENTITY="${GME_DETECTOR_IDENTITY:-}"
 RAW_CONFIDENCE="${GME_RAW_CONFIDENCE:-}"
 SCORE_THRESHOLD="${GME_SCORE_THRESHOLD:-}"
 IMAGE_SIZE="${GME_IMAGE_SIZE:-}"
@@ -30,6 +31,7 @@ REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 [ "$DETECTOR_BACKEND" = "yolo26n" ] || { echo "GME_DETECTOR_BACKEND must be yolo26n" >&2; exit 1; }
 [[ "$CHECKPOINT_PATH" = /* ]] || { echo "GME_CHECKPOINT_PATH must be absolute" >&2; exit 1; }
 [[ "$CHECKPOINT_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "GME_CHECKPOINT_SHA256 invalid" >&2; exit 1; }
+[[ "$DETECTOR_IDENTITY" =~ ^[0-9a-f]{64}$ ]] || { echo "GME_DETECTOR_IDENTITY invalid" >&2; exit 1; }
 [ "$RAW_CONFIDENCE" = "0.001" ] || { echo "GME_RAW_CONFIDENCE must be 0.001" >&2; exit 1; }
 [ "$SCORE_THRESHOLD" = "0.20" ] || { echo "GME_SCORE_THRESHOLD must be 0.20" >&2; exit 1; }
 [ "$IMAGE_SIZE" = "960" ] || { echo "GME_IMAGE_SIZE must be 960" >&2; exit 1; }
@@ -64,6 +66,7 @@ cat > "$PLIST" <<PLIST
     <key>GME_DETECTOR_BACKEND</key><string>$DETECTOR_BACKEND</string>
     <key>GME_CHECKPOINT_PATH</key><string>$CHECKPOINT_PATH</string>
     <key>GME_CHECKPOINT_SHA256</key><string>$CHECKPOINT_SHA256</string>
+    <key>GME_DETECTOR_IDENTITY</key><string>$DETECTOR_IDENTITY</string>
     <key>GME_RAW_CONFIDENCE</key><string>$RAW_CONFIDENCE</string>
     <key>GME_SCORE_THRESHOLD</key><string>$SCORE_THRESHOLD</string>
     <key>GME_IMAGE_SIZE</key><string>$IMAGE_SIZE</string>

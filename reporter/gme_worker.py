@@ -13,7 +13,7 @@ from supabase import create_client
 
 from gecko_vision_gate.gme_contracts import GMEConfig
 from gecko_vision_gate.gme_detector import build_detector
-from gecko_vision_gate.gme_engine import analyze_clip
+from gecko_vision_gate.gme_engine import analyze_clip, detector_identity
 from gecko_vision_gate.gme_serialization import serialize_artifacts
 from gecko_vision_gate.gme_yolo_detector import build_yolo_detector
 
@@ -93,6 +93,7 @@ def _build_runtime_detector():
             "model_name": detector.model_name,
             "model_version": detector.model_version,
             "checkpoint_sha256": detector.checkpoint_sha256,
+            "detector_identity": detector_identity(detector),
             "raw_confidence": detector.raw_confidence,
             "threshold": detector.threshold,
             "image_size": detector.image_size,
@@ -109,6 +110,7 @@ def _build_runtime_detector():
             "model_name": detector.model_name,
             "model_version": detector.model_version,
             "checkpoint_sha256": detector.checkpoint_sha256,
+            "detector_identity": detector_identity(detector),
             "threshold": detector.threshold,
         }
         return detector, provenance
@@ -124,7 +126,7 @@ def process_jobs(
     stats = {"jobs": len(jobs), "succeeded": 0, "failed": 0, "terminal": 0, "stale": 0}
     for job in jobs:
         try:
-            if job.detector_identity != detector_provenance.get("checkpoint_sha256"):
+            if job.detector_identity != detector_provenance.get("detector_identity"):
                 raise _JobFailure("invalid_metadata", retryable=False)
             key = clip_keys.get(job.clip_id)
             if not key:
@@ -217,6 +219,9 @@ def run(
             return 0
         clip_keys = load_clip_r2_keys(sb, [job.clip_id for job in jobs])
         detector, detector_provenance = _build_runtime_detector()
+        if detector_provenance.get("detector_identity") != config.GME_DETECTOR_IDENTITY:
+            print("[gme] detector execution identity mismatch", file=sys.stderr)
+            return 2
         engine_config = GMEConfig(analysis_fps=config.GME_ANALYSIS_FPS, anchor_interval_sec=config.GME_ANCHOR_INTERVAL_SEC)
         producer = Producer(host, now.strftime("%Y%m%dT%H%M%S"), "gme-worker/gme-motion-v0")
         stats = process_jobs(

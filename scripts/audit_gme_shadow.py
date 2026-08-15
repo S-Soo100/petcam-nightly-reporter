@@ -42,7 +42,7 @@ def evaluate_smoke(jobs: list[dict], runs: list[dict], *, detector_identity: str
 
 def main() -> int:
     sb = create_client(config.SUPABASE_URL, config.SUPABASE_KEY)
-    identity = config.GME_CHECKPOINT_SHA256
+    identity = config.GME_DETECTOR_IDENTITY
     if re.fullmatch(r"[0-9a-f]{64}", identity) is None:
         raise ValueError("detector identity must be configured as a lowercase SHA-256")
     jobs = (

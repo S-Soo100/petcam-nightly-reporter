@@ -130,7 +130,7 @@ def main(argv=None) -> int:
         sb,
         iter_eligible_batches(sb, limit=args.limit),
         apply=args.apply,
-        detector_identity=config.GME_CHECKPOINT_SHA256,
+        detector_identity=config.GME_DETECTOR_IDENTITY,
     )
     print(f"[gme-backfill] eligible={selected} enqueued={count} apply={int(args.apply)}")
     return 0

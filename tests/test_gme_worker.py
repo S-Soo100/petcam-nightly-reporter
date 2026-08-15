@@ -11,10 +11,12 @@ from reporter.gme_store import GMEJob
 
 
 NOW = datetime(2026, 8, 3, tzinfo=timezone.utc)
+V25_IDENTITY = "c101b5f8f9aab1338f2b86b1a78533b37881a6b39483321fc715ab8f4852621c"
 V25_PROVENANCE = {
     "model_name": "yolo26n",
     "model_version": "v2.5-warm-start",
     "checkpoint_sha256": "a" * 64,
+    "detector_identity": V25_IDENTITY,
     "raw_confidence": 0.001,
     "threshold": 0.20,
     "image_size": 960,
@@ -24,7 +26,7 @@ V25_PROVENANCE = {
 
 
 def _job():
-    return GMEJob("job-1", "clip-1", "live", 100, "gme-shadow-v1", "gme-motion-v0", "a" * 64, "processing", 1)
+    return GMEJob("job-1", "clip-1", "live", 100, "gme-shadow-v1", "gme-motion-v0", V25_IDENTITY, "processing", 1)
 
 
 def _analysis():
@@ -32,7 +34,7 @@ def _analysis():
         duration_sec=1.0,
         intervals=(StateInterval(0.0, 1.0, "static", ("g0001",)),),
         tracking_quality=TrackingQuality.empty(),
-        artifact_identity=ArtifactIdentity("gme-shadow-v1", "gme-motion-v0", "a" * 64),
+        artifact_identity=ArtifactIdentity("gme-shadow-v1", "gme-motion-v0", V25_IDENTITY),
     )
     return replace(base, decoded_frame_count=30, analyzed_frame_count=30, source_fps=30.0)
 
@@ -128,6 +130,7 @@ def test_runtime_detector_uses_exact_yolo_contract(monkeypatch):
         {
             "model_name": "yolo26n", "model_version": "v2.5-warm-start",
             "checkpoint_sha256": "a" * 64, "raw_confidence": 0.001,
+            "schema_version": "gate-evidence-v1",
             "threshold": 0.20, "image_size": 960, "nms_iou": 0.70,
             "max_detections": 50,
         },
@@ -135,6 +138,7 @@ def test_runtime_detector_uses_exact_yolo_contract(monkeypatch):
     monkeypatch.setattr(worker.config, "GME_DETECTOR_BACKEND", "yolo26n")
     monkeypatch.setattr(worker.config, "GME_CHECKPOINT_PATH", "/private/best.pt")
     monkeypatch.setattr(worker.config, "GME_CHECKPOINT_SHA256", "a" * 64)
+    monkeypatch.setattr(worker.config, "GME_DETECTOR_IDENTITY", V25_IDENTITY)
     monkeypatch.setattr(worker.config, "GME_RAW_CONFIDENCE", 0.001)
     monkeypatch.setattr(worker.config, "GME_SCORE_THRESHOLD", 0.20)
     monkeypatch.setattr(worker.config, "GME_IMAGE_SIZE", 960)

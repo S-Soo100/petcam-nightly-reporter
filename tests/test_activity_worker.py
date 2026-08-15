@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from _fakes import FakeSB
+from tests._fakes import FakeSB
 
 from gecko_vision_gate.activity_policy import ActivityAssessment, ActivityPolicy
 from gecko_vision_gate.motion_evidence import MotionMetrics

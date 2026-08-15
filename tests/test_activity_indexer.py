@@ -10,7 +10,7 @@ motion_clips 는 불변(상태 컬럼 금지). pagination 으로 오래된 처�
 
 from datetime import datetime
 
-from _fakes import FakeSB
+from tests._fakes import FakeSB
 
 from reporter.activity_indexer import list_unprocessed_clips
 

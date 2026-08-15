@@ -91,6 +91,14 @@ GME_GATE_THRESHOLD = float(os.environ.get("GME_GATE_THRESHOLD", "0.5"))
 GME_ANALYSIS_FPS = min(max(float(os.environ.get("GME_ANALYSIS_FPS", "30")), 1.0), 30.0)
 GME_ANCHOR_INTERVAL_SEC = float(os.environ.get("GME_ANCHOR_INTERVAL_SEC", "0.5"))
 GME_CHECKPOINT_PATH = os.environ.get("GME_CHECKPOINT_PATH", GATE_CHECKPOINT_PATH)
+GME_DETECTOR_BACKEND = os.environ.get("GME_DETECTOR_BACKEND", "rfdetr")
+GME_CHECKPOINT_SHA256 = os.environ.get("GME_CHECKPOINT_SHA256", "")
+GME_RAW_CONFIDENCE = float(os.environ.get("GME_RAW_CONFIDENCE", "0.001"))
+GME_SCORE_THRESHOLD = float(os.environ.get("GME_SCORE_THRESHOLD", "0.20"))
+GME_IMAGE_SIZE = int(os.environ.get("GME_IMAGE_SIZE", "960"))
+GME_NMS_IOU = float(os.environ.get("GME_NMS_IOU", "0.70"))
+GME_MAX_DETECTIONS = int(os.environ.get("GME_MAX_DETECTIONS", "50"))
+GME_DEVICE = os.environ.get("GME_DEVICE", "mps")
 GME_PERMANENT_PREFIX = "terra-derived/gme/v1/permanent/"
 GME_DEBUG_PREFIX = "terra-derived/gme/v1/debug-14d/"
 

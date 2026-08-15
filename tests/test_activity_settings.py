@@ -3,7 +3,7 @@
 설정 row 없음/enabled=false = 필터 비활성(빈 allowlist) → worker 0건 (지시문 §94·§190).
 """
 
-from _fakes import FakeSB
+from tests._fakes import FakeSB
 
 from reporter.activity_settings import CameraFilterSetting, load_enabled_cameras
 

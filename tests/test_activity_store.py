@@ -4,7 +4,7 @@
 같은 버전 재실행은 중복 0, 새 policy_version 은 새 assessment row(이력 보존, 지시문 §177).
 """
 
-from _fakes import FakeSB
+from tests._fakes import FakeSB
 
 from gecko_vision_gate.activity_policy import ActivityAssessment
 from gecko_vision_gate.motion_evidence import MotionMetrics

@@ -15,6 +15,7 @@ from gecko_vision_gate.gme_contracts import GMEConfig
 from gecko_vision_gate.gme_detector import build_detector
 from gecko_vision_gate.gme_engine import analyze_clip
 from gecko_vision_gate.gme_serialization import serialize_artifacts
+from gecko_vision_gate.gme_yolo_detector import build_yolo_detector
 
 from reporter import config, r2
 from reporter.gate_lock import acquire_common_gate_lock, release_common_gate_lock
@@ -42,12 +43,12 @@ class _JobFailure(RuntimeError):
         self.retryable = retryable
 
 
-def _run_payload(job, analysis, uploaded, producer: Producer) -> dict:
+def _run_payload(job, analysis, uploaded, producer: Producer, *, detector_provenance: dict) -> dict:
     return {
         "clip_id": job.clip_id, "job_id": job.id,
         "engine_schema_version": job.engine_schema_version,
         "algorithm_version": job.algorithm_version, "detector_identity": job.detector_identity,
-        "detector_provenance": {"identity": job.detector_identity},
+        "detector_provenance": dict(detector_provenance),
         "tracker_provenance": {"implementation": "opencv-sparse-lk-v0"},
         "engine_provenance": {"schema": job.engine_schema_version, "algorithm": job.algorithm_version},
         "producer_host": producer.host, "producer_run_id": producer.run_id,
@@ -76,14 +77,55 @@ def _safe_fail(sb, job, failure, worker_host, now, fail_fn):
         print(f"[gme] fail-record error job={job.id[:8]} type={type(exc).__name__}", file=sys.stderr)
 
 
+def _build_runtime_detector():
+    if config.GME_DETECTOR_BACKEND == "yolo26n":
+        detector = build_yolo_detector(
+            checkpoint=config.GME_CHECKPOINT_PATH,
+            expected_sha256=config.GME_CHECKPOINT_SHA256,
+            raw_confidence=config.GME_RAW_CONFIDENCE,
+            score_threshold=config.GME_SCORE_THRESHOLD,
+            image_size=config.GME_IMAGE_SIZE,
+            nms_iou=config.GME_NMS_IOU,
+            max_detections=config.GME_MAX_DETECTIONS,
+            device=config.GME_DEVICE,
+        )
+        provenance = {
+            "model_name": detector.model_name,
+            "model_version": detector.model_version,
+            "checkpoint_sha256": detector.checkpoint_sha256,
+            "raw_confidence": detector.raw_confidence,
+            "threshold": detector.threshold,
+            "image_size": detector.image_size,
+            "nms_iou": detector.nms_iou,
+            "max_detections": detector.max_detections,
+        }
+        return detector, provenance
+    if config.GME_DETECTOR_BACKEND == "rfdetr":
+        detector = build_detector(
+            checkpoint=config.GME_CHECKPOINT_PATH,
+            threshold=config.GME_GATE_THRESHOLD,
+        )
+        provenance = {
+            "model_name": detector.model_name,
+            "model_version": detector.model_version,
+            "checkpoint_sha256": detector.checkpoint_sha256,
+            "threshold": detector.threshold,
+        }
+        return detector, provenance
+    raise ValueError("unsupported detector backend")
+
+
 def process_jobs(
     sb, jobs, clip_keys, *, worker_host: str, now: datetime, temp_root: Path | None,
     download_fn, analyze_fn, serialize_fn, upload_fn, insert_fn, complete_fn, fail_fn,
     producer: Producer,
+    detector_provenance: dict,
 ) -> dict:
     stats = {"jobs": len(jobs), "succeeded": 0, "failed": 0, "terminal": 0, "stale": 0}
     for job in jobs:
         try:
+            if job.detector_identity != detector_provenance.get("checkpoint_sha256"):
+                raise _JobFailure("invalid_metadata", retryable=False)
             key = clip_keys.get(job.clip_id)
             if not key:
                 raise _JobFailure("invalid_metadata", retryable=False)
@@ -115,7 +157,13 @@ def process_jobs(
                 except ArtifactUploadError as exc:
                     raise _JobFailure("artifact_upload_failed", retryable=True) from exc
                 try:
-                    run_row = insert_fn(sb, _run_payload(job, analysis, uploaded, producer))
+                    run_row = insert_fn(
+                        sb,
+                        _run_payload(
+                            job, analysis, uploaded, producer,
+                            detector_provenance=detector_provenance,
+                        ),
+                    )
                     complete_fn(sb, job_id=job.id, run_id=run_row["id"], worker_host=worker_host)
                 except StaleGMEJobError:
                     stats["stale"] += 1
@@ -155,6 +203,9 @@ def run(
         return 0
     try:
         now = now or datetime.now(timezone.utc)
+        if config.GME_DETECTOR_BACKEND not in {"rfdetr", "yolo26n"}:
+            print("[gme] unsupported detector backend", file=sys.stderr)
+            return 2
         sb_factory = sb_factory or (lambda: create_client(config.SUPABASE_URL, config.SUPABASE_KEY))
         sb = sb_factory()
         queue_stats = operational_stats(sb, now=now)
@@ -165,7 +216,7 @@ def run(
             print("[gme] no jobs — skip")
             return 0
         clip_keys = load_clip_r2_keys(sb, [job.clip_id for job in jobs])
-        detector = build_detector(checkpoint=config.GME_CHECKPOINT_PATH, threshold=config.GME_GATE_THRESHOLD)
+        detector, detector_provenance = _build_runtime_detector()
         engine_config = GMEConfig(analysis_fps=config.GME_ANALYSIS_FPS, anchor_interval_sec=config.GME_ANCHOR_INTERVAL_SEC)
         producer = Producer(host, now.strftime("%Y%m%dT%H%M%S"), "gme-worker/gme-motion-v0")
         stats = process_jobs(
@@ -175,6 +226,7 @@ def run(
             serialize_fn=serialize_artifacts,
             upload_fn=lambda **kwargs: upload_artifacts(r2.get_r2_client(), bucket=config.R2_BUCKET, **kwargs),
             insert_fn=insert_run, complete_fn=complete_job, fail_fn=fail_job, producer=producer,
+            detector_provenance=detector_provenance,
         )
         print(f"[gme] jobs={stats['jobs']} ok={stats['succeeded']} fail={stats['failed']} terminal={stats['terminal']}")
         return 1 if stats["failed"] else 0

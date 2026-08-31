@@ -13,6 +13,9 @@ dependencies = [
     # 지시문 §135). 로컬 editable path — 절대경로 하드코딩 아님(D4). 두 레포는 형제 위치.
     "gecko-vision-gate",
     "anthropic>=0.116.0",
+    "fastapi>=0.141.1",
+    "uvicorn>=0.52.4",
+    "python-multipart>=0.0.32",
 ]
 
 [dependency-groups]

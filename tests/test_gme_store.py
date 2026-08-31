@@ -16,6 +16,7 @@ from reporter.gme_store import (
 
 
 NOW = datetime(2026, 8, 3, tzinfo=timezone.utc)
+V26_IDENTITY = "89e4738a60ebb71900e05e96f5b7262e8b900f5c9bba9b9cb9e34fca36f789b7"
 
 
 class Result:
@@ -54,13 +55,32 @@ def _row(**changes):
     return row
 
 
-def test_claim_uses_include_historical_flag_and_frozen_job():
-    sb = SB({"fn_claim_gme_jobs": [_row()]})
-    jobs = claim_jobs(sb, limit=3, worker_host="host", now=NOW, include_historical=False)
+def test_claim_uses_identity_isolated_rpc_and_frozen_job():
+    sb = SB({"fn_claim_gme_jobs_for_detector": [_row()]})
+    jobs = claim_jobs(
+        sb, limit=3, worker_host="host", now=NOW, include_historical=False,
+        detector_identity=V26_IDENTITY,
+    )
     assert jobs == [GMEJob.from_row(_row())]
-    assert sb.calls[0][1]["p_include_historical"] is False
+    assert sb.calls == [("fn_claim_gme_jobs_for_detector", {
+        "p_limit": 3,
+        "p_worker_host": "host",
+        "p_now": NOW.isoformat(),
+        "p_include_historical": False,
+        "p_detector_identity": V26_IDENTITY,
+    })]
     with pytest.raises(Exception):
         jobs[0].source = "historical"
+
+
+def test_claim_rejects_invalid_identity_before_rpc():
+    sb = SB({})
+    with pytest.raises(ValueError, match="lowercase SHA-256"):
+        claim_jobs(
+            sb, limit=1, worker_host="host", now=NOW, include_historical=True,
+            detector_identity="v2.6",
+        )
+    assert sb.calls == []
 
 
 def test_job_rejects_unknown_source_or_status_before_processing():
@@ -83,9 +103,12 @@ def test_fail_rejects_non_allowlisted_code_before_rpc():
 
 
 def test_rpc_errors_are_redacted():
-    sb = SB({"fn_claim_gme_jobs": RuntimeError("https://secret.invalid?key=secret")})
+    sb = SB({"fn_claim_gme_jobs_for_detector": RuntimeError("https://secret.invalid?key=secret")})
     with pytest.raises(GMEStoreError) as error:
-        claim_jobs(sb, limit=1, worker_host="h", now=NOW, include_historical=True)
+        claim_jobs(
+            sb, limit=1, worker_host="h", now=NOW, include_historical=True,
+            detector_identity=V26_IDENTITY,
+        )
     assert "secret.invalid" not in str(error.value)
 
 

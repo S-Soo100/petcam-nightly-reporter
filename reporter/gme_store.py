@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import re
 
 ALLOWED_STATUS = frozenset({"queued", "processing", "succeeded", "failed_retryable", "failed_terminal"})
 ALLOWED_SOURCE = frozenset({"smoke", "live", "historical"})
@@ -57,10 +58,21 @@ def _rpc(sb, name: str, args: dict):
         raise GMEStoreError(f"rpc failed: {name} ({type(exc).__name__})") from None
 
 
-def claim_jobs(sb, *, limit: int, worker_host: str, now: datetime, include_historical: bool) -> list[GMEJob]:
-    rows = _rpc(sb, "fn_claim_gme_jobs", {
+def claim_jobs(
+    sb,
+    *,
+    limit: int,
+    worker_host: str,
+    now: datetime,
+    include_historical: bool,
+    detector_identity: str,
+) -> list[GMEJob]:
+    if re.fullmatch(r"[0-9a-f]{64}", detector_identity) is None:
+        raise ValueError("detector identity must be a lowercase SHA-256")
+    rows = _rpc(sb, "fn_claim_gme_jobs_for_detector", {
         "p_limit": limit, "p_worker_host": worker_host, "p_now": now.isoformat(),
         "p_include_historical": include_historical,
+        "p_detector_identity": detector_identity,
     })
     return [GMEJob.from_row(row) for row in (rows or [])]
 

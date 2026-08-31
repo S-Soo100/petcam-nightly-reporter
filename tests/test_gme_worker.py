@@ -53,6 +53,30 @@ def test_disabled_worker_has_zero_side_effects(monkeypatch):
     assert called == []
 
 
+def test_run_passes_configured_identity_to_claim_rpc(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(worker.config, "GME_ENABLED", True)
+    monkeypatch.setattr(worker.config, "GME_EXPECTED_HOST", "expected")
+    monkeypatch.setattr(worker.config, "GME_DETECTOR_IDENTITY", V26_IDENTITY)
+    monkeypatch.setattr(worker, "_validated_v26_engine_config", lambda: object())
+    monkeypatch.setattr(worker, "operational_stats", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(worker, "allow_historical_claim", lambda *_args, **_kwargs: False)
+
+    def fake_claim(_sb, **kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr(worker, "claim_jobs", fake_claim)
+    rc = worker.run(
+        sb_factory=lambda: object(), hostname_fn=lambda: "expected",
+        acquire_lock_fn=lambda: object(), release_lock_fn=lambda _lock: None,
+    )
+
+    assert rc == 0
+    assert captured["detector_identity"] == V26_IDENTITY
+    assert captured["include_historical"] is False
+
+
 def test_process_jobs_downloads_analyzes_uploads_inserts_and_completes_once(tmp_path):
     calls = []
     artifacts = UploadedArtifacts("p", "b" * 64, 10, "d", "c" * 64, 20)

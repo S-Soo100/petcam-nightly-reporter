@@ -7,24 +7,32 @@ from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parent.parent / "install-launchd-gme.sh"
 HOST = "petcam-macmini.local"
-V25_SHA = "2b128f105e898bc472ed66861583ab80007dae6e94b291db497d7a2f8081f84a"
-V25_IDENTITY = "d4654168af21d26697ab1bd9a5dc4a05bd92baf5c9328800915cc347803d05b6"
+V26_SHA = "a00e5a7a1e1f9197accb036339a38a7c821f03c8ab79611ebce89e5cde59b513"
+V26_FREEZE_SHA = "8f8e02beb452ec2ddfdce344dff507294f56136c69224990c50552d22bb343a0"
+V26_IDENTITY = "89e4738a60ebb71900e05e96f5b7262e8b900f5c9bba9b9cb9e34fca36f789b7"
 
 
-def _v25_env():
+def _v26_env():
     return {
         "GME_ENABLED": "1",
         "GME_EXPECTED_HOST": HOST,
         "GME_BATCH_LIMIT": "10",
         "GME_DETECTOR_BACKEND": "yolo26n",
-        "GME_CHECKPOINT_PATH": "/private/models/yolo26n-v25-best.pt",
-        "GME_CHECKPOINT_SHA256": V25_SHA,
-        "GME_DETECTOR_IDENTITY": V25_IDENTITY,
+        "GME_CHECKPOINT_PATH": "/private/models/yolo26n-v26-best.pt",
+        "GME_CHECKPOINT_SHA256": V26_SHA,
+        "GME_DETECTOR_FREEZE_SHA256": V26_FREEZE_SHA,
+        "GME_DETECTOR_IDENTITY": V26_IDENTITY,
+        "GME_MODEL_VERSION": "v2.6-warm-start-s28",
         "GME_RAW_CONFIDENCE": "0.001",
-        "GME_SCORE_THRESHOLD": "0.20",
+        "GME_SCORE_THRESHOLD": "0.15",
         "GME_IMAGE_SIZE": "960",
         "GME_NMS_IOU": "0.70",
+        "GME_POST_NMS_IOU": "0.55",
         "GME_MAX_DETECTIONS": "50",
+        "GME_ANALYSIS_FPS": "10",
+        "GME_ANCHOR_INTERVAL_SEC": "0.1",
+        "GME_TEMPORAL_WINDOW_FRAMES": "5",
+        "GME_TEMPORAL_MIN_POSITIVE_FRAMES": "3",
         "GME_DEVICE": "mps",
     }
 
@@ -60,7 +68,7 @@ def test_installer_is_fail_closed_and_uses_60_second_one_shot(tmp_path):
     assert not list(home.rglob("*.plist"))
     good, home = _run(
         tmp_path / "good",
-        _v25_env(),
+        _v26_env(),
     )
     assert good.returncode == 0, good.stderr
     text = next(home.rglob("*.plist")).read_text()
@@ -69,13 +77,20 @@ def test_installer_is_fail_closed_and_uses_60_second_one_shot(tmp_path):
     assert "<integer>60</integer>" in text
     assert "<key>GME_BATCH_LIMIT</key><string>10</string>" in text
     assert "<key>GME_DETECTOR_BACKEND</key><string>yolo26n</string>" in text
-    assert f"<key>GME_CHECKPOINT_SHA256</key><string>{V25_SHA}</string>" in text
-    assert f"<key>GME_DETECTOR_IDENTITY</key><string>{V25_IDENTITY}</string>" in text
+    assert f"<key>GME_CHECKPOINT_SHA256</key><string>{V26_SHA}</string>" in text
+    assert f"<key>GME_DETECTOR_FREEZE_SHA256</key><string>{V26_FREEZE_SHA}</string>" in text
+    assert f"<key>GME_DETECTOR_IDENTITY</key><string>{V26_IDENTITY}</string>" in text
+    assert "<key>GME_MODEL_VERSION</key><string>v2.6-warm-start-s28</string>" in text
     assert "<key>GME_RAW_CONFIDENCE</key><string>0.001</string>" in text
-    assert "<key>GME_SCORE_THRESHOLD</key><string>0.20</string>" in text
+    assert "<key>GME_SCORE_THRESHOLD</key><string>0.15</string>" in text
     assert "<key>GME_IMAGE_SIZE</key><string>960</string>" in text
     assert "<key>GME_NMS_IOU</key><string>0.70</string>" in text
+    assert "<key>GME_POST_NMS_IOU</key><string>0.55</string>" in text
     assert "<key>GME_MAX_DETECTIONS</key><string>50</string>" in text
+    assert "<key>GME_ANALYSIS_FPS</key><string>10</string>" in text
+    assert "<key>GME_ANCHOR_INTERVAL_SEC</key><string>0.1</string>" in text
+    assert "<key>GME_TEMPORAL_WINDOW_FRAMES</key><string>5</string>" in text
+    assert "<key>GME_TEMPORAL_MIN_POSITIVE_FRAMES</key><string>3</string>" in text
     assert "<key>GME_DEVICE</key><string>mps</string>" in text
     assert "WorkingDirectory" in text
     assert "SUPABASE" not in text and "R2_SECRET" not in text
@@ -84,14 +99,14 @@ def test_installer_is_fail_closed_and_uses_60_second_one_shot(tmp_path):
 def test_installer_rejects_out_of_range_batch_limit(tmp_path):
     result, home = _run(
         tmp_path / "bad-batch",
-        {**_v25_env(), "GME_BATCH_LIMIT": "51"},
+        {**_v26_env(), "GME_BATCH_LIMIT": "51"},
     )
     assert result.returncode != 0
     assert not list(home.rglob("*.plist"))
 
 
 def test_installer_rejects_missing_checkpoint_sha(tmp_path):
-    env = _v25_env()
+    env = _v26_env()
     del env["GME_CHECKPOINT_SHA256"]
     result, home = _run(tmp_path / "missing-sha", env)
     assert result.returncode != 0
@@ -99,7 +114,7 @@ def test_installer_rejects_missing_checkpoint_sha(tmp_path):
 
 
 def test_installer_rejects_missing_detector_identity(tmp_path):
-    env = _v25_env()
+    env = _v26_env()
     del env["GME_DETECTOR_IDENTITY"]
     result, home = _run(tmp_path / "missing-identity", env)
     assert result.returncode != 0

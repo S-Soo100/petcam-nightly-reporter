@@ -10,12 +10,19 @@ BATCH_LIMIT="${GME_BATCH_LIMIT:-4}"
 DETECTOR_BACKEND="${GME_DETECTOR_BACKEND:-}"
 CHECKPOINT_PATH="${GME_CHECKPOINT_PATH:-}"
 CHECKPOINT_SHA256="${GME_CHECKPOINT_SHA256:-}"
+DETECTOR_FREEZE_SHA256="${GME_DETECTOR_FREEZE_SHA256:-}"
 DETECTOR_IDENTITY="${GME_DETECTOR_IDENTITY:-}"
+MODEL_VERSION="${GME_MODEL_VERSION:-}"
 RAW_CONFIDENCE="${GME_RAW_CONFIDENCE:-}"
 SCORE_THRESHOLD="${GME_SCORE_THRESHOLD:-}"
 IMAGE_SIZE="${GME_IMAGE_SIZE:-}"
 NMS_IOU="${GME_NMS_IOU:-}"
+POST_NMS_IOU="${GME_POST_NMS_IOU:-}"
 MAX_DETECTIONS="${GME_MAX_DETECTIONS:-}"
+ANALYSIS_FPS="${GME_ANALYSIS_FPS:-}"
+ANCHOR_INTERVAL_SEC="${GME_ANCHOR_INTERVAL_SEC:-}"
+TEMPORAL_WINDOW_FRAMES="${GME_TEMPORAL_WINDOW_FRAMES:-}"
+TEMPORAL_MIN_POSITIVE_FRAMES="${GME_TEMPORAL_MIN_POSITIVE_FRAMES:-}"
 DEVICE="${GME_DEVICE:-}"
 ACTUAL_HOST="$(hostname)"
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -30,13 +37,20 @@ REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 }
 [ "$DETECTOR_BACKEND" = "yolo26n" ] || { echo "GME_DETECTOR_BACKEND must be yolo26n" >&2; exit 1; }
 [[ "$CHECKPOINT_PATH" = /* ]] || { echo "GME_CHECKPOINT_PATH must be absolute" >&2; exit 1; }
-[[ "$CHECKPOINT_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "GME_CHECKPOINT_SHA256 invalid" >&2; exit 1; }
-[[ "$DETECTOR_IDENTITY" =~ ^[0-9a-f]{64}$ ]] || { echo "GME_DETECTOR_IDENTITY invalid" >&2; exit 1; }
+[ "$CHECKPOINT_SHA256" = "a00e5a7a1e1f9197accb036339a38a7c821f03c8ab79611ebce89e5cde59b513" ] || { echo "GME_CHECKPOINT_SHA256 must be approved v2.6" >&2; exit 1; }
+[ "$DETECTOR_FREEZE_SHA256" = "8f8e02beb452ec2ddfdce344dff507294f56136c69224990c50552d22bb343a0" ] || { echo "GME_DETECTOR_FREEZE_SHA256 must be approved v2.6" >&2; exit 1; }
+[ "$DETECTOR_IDENTITY" = "89e4738a60ebb71900e05e96f5b7262e8b900f5c9bba9b9cb9e34fca36f789b7" ] || { echo "GME_DETECTOR_IDENTITY must be approved v2.6" >&2; exit 1; }
+[ "$MODEL_VERSION" = "v2.6-warm-start-s28" ] || { echo "GME_MODEL_VERSION must be v2.6-warm-start-s28" >&2; exit 1; }
 [ "$RAW_CONFIDENCE" = "0.001" ] || { echo "GME_RAW_CONFIDENCE must be 0.001" >&2; exit 1; }
-[ "$SCORE_THRESHOLD" = "0.20" ] || { echo "GME_SCORE_THRESHOLD must be 0.20" >&2; exit 1; }
+[ "$SCORE_THRESHOLD" = "0.15" ] || { echo "GME_SCORE_THRESHOLD must be 0.15" >&2; exit 1; }
 [ "$IMAGE_SIZE" = "960" ] || { echo "GME_IMAGE_SIZE must be 960" >&2; exit 1; }
 [ "$NMS_IOU" = "0.70" ] || { echo "GME_NMS_IOU must be 0.70" >&2; exit 1; }
+[ "$POST_NMS_IOU" = "0.55" ] || { echo "GME_POST_NMS_IOU must be 0.55" >&2; exit 1; }
 [ "$MAX_DETECTIONS" = "50" ] || { echo "GME_MAX_DETECTIONS must be 50" >&2; exit 1; }
+[ "$ANALYSIS_FPS" = "10" ] || { echo "GME_ANALYSIS_FPS must be 10" >&2; exit 1; }
+[ "$ANCHOR_INTERVAL_SEC" = "0.1" ] || { echo "GME_ANCHOR_INTERVAL_SEC must be 0.1" >&2; exit 1; }
+[ "$TEMPORAL_WINDOW_FRAMES" = "5" ] || { echo "GME_TEMPORAL_WINDOW_FRAMES must be 5" >&2; exit 1; }
+[ "$TEMPORAL_MIN_POSITIVE_FRAMES" = "3" ] || { echo "GME_TEMPORAL_MIN_POSITIVE_FRAMES must be 3" >&2; exit 1; }
 [ "$DEVICE" = "mps" ] || { echo "GME_DEVICE must be mps" >&2; exit 1; }
 
 UV_BIN="$(command -v uv || true)"
@@ -66,12 +80,19 @@ cat > "$PLIST" <<PLIST
     <key>GME_DETECTOR_BACKEND</key><string>$DETECTOR_BACKEND</string>
     <key>GME_CHECKPOINT_PATH</key><string>$CHECKPOINT_PATH</string>
     <key>GME_CHECKPOINT_SHA256</key><string>$CHECKPOINT_SHA256</string>
+    <key>GME_DETECTOR_FREEZE_SHA256</key><string>$DETECTOR_FREEZE_SHA256</string>
     <key>GME_DETECTOR_IDENTITY</key><string>$DETECTOR_IDENTITY</string>
+    <key>GME_MODEL_VERSION</key><string>$MODEL_VERSION</string>
     <key>GME_RAW_CONFIDENCE</key><string>$RAW_CONFIDENCE</string>
     <key>GME_SCORE_THRESHOLD</key><string>$SCORE_THRESHOLD</string>
     <key>GME_IMAGE_SIZE</key><string>$IMAGE_SIZE</string>
     <key>GME_NMS_IOU</key><string>$NMS_IOU</string>
+    <key>GME_POST_NMS_IOU</key><string>$POST_NMS_IOU</string>
     <key>GME_MAX_DETECTIONS</key><string>$MAX_DETECTIONS</string>
+    <key>GME_ANALYSIS_FPS</key><string>$ANALYSIS_FPS</string>
+    <key>GME_ANCHOR_INTERVAL_SEC</key><string>$ANCHOR_INTERVAL_SEC</string>
+    <key>GME_TEMPORAL_WINDOW_FRAMES</key><string>$TEMPORAL_WINDOW_FRAMES</string>
+    <key>GME_TEMPORAL_MIN_POSITIVE_FRAMES</key><string>$TEMPORAL_MIN_POSITIVE_FRAMES</string>
     <key>GME_DEVICE</key><string>$DEVICE</string>
   </dict>
 </dict></plist>

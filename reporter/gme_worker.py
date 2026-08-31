@@ -28,6 +28,10 @@ from reporter.gme_store import (
 from reporter.r2 import R2AccessDenied, R2SourceMissing
 from reporter.vlm_host_guard import HostOwnershipError, require_expected_host
 
+V26_CHECKPOINT_SHA256 = "a00e5a7a1e1f9197accb036339a38a7c821f03c8ab79611ebce89e5cde59b513"
+V26_DETECTOR_FREEZE_SHA256 = "8f8e02beb452ec2ddfdce344dff507294f56136c69224990c50552d22bb343a0"
+V26_DETECTOR_IDENTITY = "89e4738a60ebb71900e05e96f5b7262e8b900f5c9bba9b9cb9e34fca36f789b7"
+
 
 @dataclass(frozen=True, slots=True)
 class Producer:
@@ -82,23 +86,33 @@ def _build_runtime_detector():
         detector = build_yolo_detector(
             checkpoint=config.GME_CHECKPOINT_PATH,
             expected_sha256=config.GME_CHECKPOINT_SHA256,
+            model_version=config.GME_MODEL_VERSION,
             raw_confidence=config.GME_RAW_CONFIDENCE,
             score_threshold=config.GME_SCORE_THRESHOLD,
             image_size=config.GME_IMAGE_SIZE,
             nms_iou=config.GME_NMS_IOU,
+            post_nms_iou=config.GME_POST_NMS_IOU,
             max_detections=config.GME_MAX_DETECTIONS,
+            analysis_fps=config.GME_ANALYSIS_FPS,
+            temporal_window_frames=config.GME_TEMPORAL_WINDOW_FRAMES,
+            temporal_min_positive_frames=config.GME_TEMPORAL_MIN_POSITIVE_FRAMES,
             device=config.GME_DEVICE,
         )
         provenance = {
             "model_name": detector.model_name,
             "model_version": detector.model_version,
             "checkpoint_sha256": detector.checkpoint_sha256,
+            "detector_freeze_sha256": config.GME_DETECTOR_FREEZE_SHA256,
             "detector_identity": detector_identity(detector),
             "raw_confidence": detector.raw_confidence,
             "threshold": detector.threshold,
             "image_size": detector.image_size,
-            "nms_iou": detector.nms_iou,
+            "model_nms_iou": detector.nms_iou,
+            "post_nms_iou": detector.post_nms_iou,
             "max_detections": detector.max_detections,
+            "analysis_fps": config.GME_ANALYSIS_FPS,
+            "temporal_window_frames": config.GME_TEMPORAL_WINDOW_FRAMES,
+            "temporal_min_positive_frames": config.GME_TEMPORAL_MIN_POSITIVE_FRAMES,
         }
         return detector, provenance
     if config.GME_DETECTOR_BACKEND == "rfdetr":
@@ -115,6 +129,42 @@ def _build_runtime_detector():
         }
         return detector, provenance
     raise ValueError("unsupported detector backend")
+
+
+def _validated_v26_engine_config() -> GMEConfig:
+    """DB/R2 접근 전에 승인된 v2.6 실행값과 로컬 Gate 계약을 함께 검증한다."""
+
+    expected = {
+        "GME_DETECTOR_BACKEND": "yolo26n",
+        "GME_CHECKPOINT_SHA256": V26_CHECKPOINT_SHA256,
+        "GME_DETECTOR_FREEZE_SHA256": V26_DETECTOR_FREEZE_SHA256,
+        "GME_DETECTOR_IDENTITY": V26_DETECTOR_IDENTITY,
+        "GME_MODEL_VERSION": "v2.6-warm-start-s28",
+        "GME_RAW_CONFIDENCE": 0.001,
+        "GME_SCORE_THRESHOLD": 0.15,
+        "GME_IMAGE_SIZE": 960,
+        "GME_NMS_IOU": 0.70,
+        "GME_POST_NMS_IOU": 0.55,
+        "GME_MAX_DETECTIONS": 50,
+        "GME_ANALYSIS_FPS": 10.0,
+        "GME_ANCHOR_INTERVAL_SEC": 0.1,
+        "GME_TEMPORAL_WINDOW_FRAMES": 5,
+        "GME_TEMPORAL_MIN_POSITIVE_FRAMES": 3,
+        "GME_DEVICE": "mps",
+    }
+    for name, value in expected.items():
+        if getattr(config, name) != value:
+            raise ValueError(f"v2.6 contract mismatch: {name}")
+    engine_config = GMEConfig.v26()
+    if (
+        engine_config.analysis_fps != config.GME_ANALYSIS_FPS
+        or engine_config.anchor_interval_sec != config.GME_ANCHOR_INTERVAL_SEC
+        or engine_config.detection_window_frames != config.GME_TEMPORAL_WINDOW_FRAMES
+        or engine_config.detection_min_positive_frames != config.GME_TEMPORAL_MIN_POSITIVE_FRAMES
+        or not engine_config.detector_every_analysis_frame
+    ):
+        raise ValueError("local Gate v2.6 engine contract mismatch")
+    return engine_config
 
 
 def process_jobs(
@@ -205,8 +255,10 @@ def run(
         return 0
     try:
         now = now or datetime.now(timezone.utc)
-        if config.GME_DETECTOR_BACKEND not in {"rfdetr", "yolo26n"}:
-            print("[gme] unsupported detector backend", file=sys.stderr)
+        try:
+            engine_config = _validated_v26_engine_config()
+        except ValueError as exc:
+            print(f"[gme] {exc}", file=sys.stderr)
             return 2
         sb_factory = sb_factory or (lambda: create_client(config.SUPABASE_URL, config.SUPABASE_KEY))
         sb = sb_factory()
@@ -222,7 +274,6 @@ def run(
         if detector_provenance.get("detector_identity") != config.GME_DETECTOR_IDENTITY:
             print("[gme] detector execution identity mismatch", file=sys.stderr)
             return 2
-        engine_config = GMEConfig(analysis_fps=config.GME_ANALYSIS_FPS, anchor_interval_sec=config.GME_ANCHOR_INTERVAL_SEC)
         producer = Producer(host, now.strftime("%Y%m%dT%H%M%S"), "gme-worker/gme-motion-v0")
         stats = process_jobs(
             sb, jobs, clip_keys, worker_host=host, now=now, temp_root=None,

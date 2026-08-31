@@ -67,6 +67,7 @@ def load_existing_identity_jobs(sb, *, detector_identity: str) -> list[dict]:
         sb.table("gme_jobs")
         .select("id,clip_id,source,status,failure_code,result_run_id,detector_identity")
         .eq("detector_identity", detector_identity)
+        .eq("source", "smoke")
         .execute().data or []
     )
 
@@ -86,13 +87,18 @@ def main(argv=None) -> int:
             print(f"[gme-smoke] preflight failed: {exc}")
             return 2
         selected = select_recovery_smoke(
-            load_eligible(sb, limit=500), existing_clip_ids=existing_clip_ids, limit=10,
+            load_eligible(sb, limit=500, detector_identity=identity),
+            existing_clip_ids=existing_clip_ids,
+            limit=10,
         )
     else:
         if existing:
             print(f"[gme-smoke] preflight failed existing_identity_jobs={len(existing)}")
             return 2
-        selected = select_smoke(load_eligible(sb, limit=200), limit=10)
+        selected = select_smoke(
+            load_eligible(sb, limit=200, detector_identity=identity),
+            limit=10,
+        )
     if len(selected) != 10:
         print(f"[gme-smoke] preflight failed eligible={len(selected)}/10")
         return 2

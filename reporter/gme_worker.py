@@ -30,7 +30,7 @@ from reporter.vlm_host_guard import HostOwnershipError, require_expected_host
 
 V26_CHECKPOINT_SHA256 = "a00e5a7a1e1f9197accb036339a38a7c821f03c8ab79611ebce89e5cde59b513"
 V26_DETECTOR_FREEZE_SHA256 = "8f8e02beb452ec2ddfdce344dff507294f56136c69224990c50552d22bb343a0"
-V26_DETECTOR_IDENTITY = "89e4738a60ebb71900e05e96f5b7262e8b900f5c9bba9b9cb9e34fca36f789b7"
+V26_DETECTOR_IDENTITY = "deccfc8315d3c00edb5bf59db3c573dca568e9d6d7a5da8d7dc93d2082bdb899"
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +104,7 @@ def _build_runtime_detector():
             "checkpoint_sha256": detector.checkpoint_sha256,
             "detector_freeze_sha256": config.GME_DETECTOR_FREEZE_SHA256,
             "detector_identity": detector_identity(detector),
+            "bbox_coordinate_contract": detector.bbox_coordinate_contract,
             "raw_confidence": detector.raw_confidence,
             "threshold": detector.threshold,
             "image_size": detector.image_size,

@@ -16,7 +16,7 @@ from reporter.gme_store import (
 
 
 NOW = datetime(2026, 8, 3, tzinfo=timezone.utc)
-V26_IDENTITY = "89e4738a60ebb71900e05e96f5b7262e8b900f5c9bba9b9cb9e34fca36f789b7"
+V26_IDENTITY = "deccfc8315d3c00edb5bf59db3c573dca568e9d6d7a5da8d7dc93d2082bdb899"
 
 
 class Result:

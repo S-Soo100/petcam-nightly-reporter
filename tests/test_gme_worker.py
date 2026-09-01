@@ -13,13 +13,14 @@ from reporter.gme_store import GMEJob
 NOW = datetime(2026, 8, 3, tzinfo=timezone.utc)
 V26_SHA = "a00e5a7a1e1f9197accb036339a38a7c821f03c8ab79611ebce89e5cde59b513"
 V26_FREEZE_SHA = "8f8e02beb452ec2ddfdce344dff507294f56136c69224990c50552d22bb343a0"
-V26_IDENTITY = "89e4738a60ebb71900e05e96f5b7262e8b900f5c9bba9b9cb9e34fca36f789b7"
+V26_IDENTITY = "deccfc8315d3c00edb5bf59db3c573dca568e9d6d7a5da8d7dc93d2082bdb899"
 V26_PROVENANCE = {
     "model_name": "yolo26n",
     "model_version": "v2.6-warm-start-s28",
     "checkpoint_sha256": V26_SHA,
     "detector_freeze_sha256": V26_FREEZE_SHA,
     "detector_identity": V26_IDENTITY,
+    "bbox_coordinate_contract": "xywh-top-left-v1",
     "raw_confidence": 0.001,
     "threshold": 0.15,
     "image_size": 960,
@@ -165,6 +166,7 @@ def test_runtime_detector_uses_exact_v26_yolo_contract(monkeypatch):
             "threshold": 0.15, "image_size": 960, "nms_iou": 0.70,
             "post_nms_iou": 0.55, "max_detections": 50,
             "execution_identity": V26_IDENTITY,
+            "bbox_coordinate_contract": "xywh-top-left-v1",
         },
     )()
     monkeypatch.setattr(worker.config, "GME_DETECTOR_BACKEND", "yolo26n")

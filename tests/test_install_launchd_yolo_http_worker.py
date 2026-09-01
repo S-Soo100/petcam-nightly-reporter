@@ -13,7 +13,13 @@ def _stub_bin(tmp_path):
     path = tmp_path / "bin"
     path.mkdir()
     for name, body in {
-        "launchctl": '#!/usr/bin/env bash\necho "$*" >> "$LAUNCHCTL_LOG"\n',
+        "launchctl": '''#!/usr/bin/env bash
+echo "$*" >> "$LAUNCHCTL_LOG"
+if [ "${BOOTSTRAP_FAIL_ONCE:-0}" = "1" ] && [ "${1:-}" = "bootstrap" ] && [ ! -f "$BOOTSTRAP_STATE" ]; then
+  touch "$BOOTSTRAP_STATE"
+  exit 5
+fi
+''',
         "plutil": "#!/usr/bin/env bash\nexit 0\n",
         "uv": "#!/usr/bin/env bash\nexit 0\n",
         "hostname": f"#!/usr/bin/env bash\necho {HOST}\n",
@@ -24,7 +30,7 @@ def _stub_bin(tmp_path):
     return path
 
 
-def _run(tmp_path, *, env_mode="600", token="worker-token"):
+def _run(tmp_path, *, env_mode="600", token="worker-token", bootstrap_fail_once=False):
     tmp_path.mkdir(parents=True, exist_ok=True)
     home = tmp_path / "home"
     home.mkdir()
@@ -41,6 +47,8 @@ def _run(tmp_path, *, env_mode="600", token="worker-token"):
         "HOME": str(home),
         "PATH": f"{bin_path}:/usr/bin:/bin",
         "LAUNCHCTL_LOG": str(tmp_path / "launch.log"),
+        "BOOTSTRAP_FAIL_ONCE": "1" if bootstrap_fail_once else "0",
+        "BOOTSTRAP_STATE": str(tmp_path / "bootstrap.state"),
         "YOLO_HTTP_EXPECTED_HOST": HOST,
     }
     return subprocess.run(["bash", str(script)], env=env, capture_output=True, text=True), home
@@ -63,3 +71,11 @@ def test_installer_rejects_group_readable_env_before_plist_write(tmp_path):
 
     assert result.returncode != 0
     assert not list(home.rglob("*.plist"))
+
+
+def test_installer_retries_transient_bootstrap_after_bootout(tmp_path):
+    result, _home = _run(tmp_path, bootstrap_fail_once=True)
+
+    assert result.returncode == 0, result.stderr
+    lines = (tmp_path / "launch.log").read_text().splitlines()
+    assert sum("bootstrap" in line for line in lines) == 2

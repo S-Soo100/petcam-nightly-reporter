@@ -46,5 +46,14 @@ PLIST
 
 plutil -lint "$PLIST" >/dev/null
 launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
-launchctl bootstrap "gui/$(id -u)" "$PLIST"
+for attempt in 1 2 3; do
+  if launchctl bootstrap "gui/$(id -u)" "$PLIST"; then
+    break
+  fi
+  if [ "$attempt" -eq 3 ]; then
+    echo "failed to bootstrap $LABEL after 3 attempts" >&2
+    exit 1
+  fi
+  sleep 1
+done
 echo "installed $LABEL localhost:8765"

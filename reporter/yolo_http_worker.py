@@ -25,6 +25,7 @@ from reporter.gme_worker import _build_runtime_detector
 IMAGE_LIMIT = 10 * 1024 * 1024
 VIDEO_LIMIT = 50 * 1024 * 1024
 MODEL_VERSION = "v2.6-warm-start-s28"
+BBOX_COORDINATE_CONTRACT = "xywh-top-left-v1"
 WARNING = "연구용 결과이며 오류 가능"
 PUBLIC_INFERENCE_LOCK_TIMEOUT_SEC = 120.0
 ALLOWED_MEDIA = {
@@ -106,11 +107,11 @@ def _normalized_detections(detector, frame, timestamp_sec: float) -> list[dict]:
     height, width = frame.shape[:2]
     rows = []
     for detection in detector.detect(frame, timestamp_sec):
-        center_x, center_y, box_width, box_height = detection.bbox_xywh
-        x1 = max(0.0, center_x - box_width / 2)
-        y1 = max(0.0, center_y - box_height / 2)
-        x2 = min(float(width), center_x + box_width / 2)
-        y2 = min(float(height), center_y + box_height / 2)
+        box_x, box_y, box_width, box_height = detection.bbox_xywh
+        x1 = max(0.0, box_x)
+        y1 = max(0.0, box_y)
+        x2 = min(float(width), box_x + box_width)
+        y2 = min(float(height), box_y + box_height)
         if x2 <= x1 or y2 <= y1:
             continue
         rows.append(
@@ -188,6 +189,8 @@ def _infer(path: Path, media_kind: str, holder: _DetectorHolder, deps: WorkerDep
         detector = holder.get()
         if getattr(detector, "model_version", None) != MODEL_VERSION:
             raise _InferenceRejected("model_version_mismatch")
+        if getattr(detector, "bbox_coordinate_contract", None) != BBOX_COORDINATE_CONTRACT:
+            raise _InferenceRejected("bbox_coordinate_contract_mismatch")
         if media_kind == "image":
             return _analyze_image(path, detector)
         return _analyze_video(path, detector, deps.capture_factory)

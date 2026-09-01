@@ -19,6 +19,7 @@ from reporter.yolo_http_worker import WorkerDependencies, create_app
 
 class FakeDetector:
     model_version = "v2.6-warm-start-s28"
+    bbox_coordinate_contract = "xywh-top-left-v1"
 
     def __init__(self, detections=()):
         self.detections = detections
@@ -95,7 +96,7 @@ def test_infer_rejects_missing_worker_token(tmp_path):
     assert list(tmp_path.iterdir()) == []
 
 
-def test_image_infer_returns_normalized_v26_boxes(tmp_path):
+def test_image_infer_preserves_top_left_v26_boxes(tmp_path):
     detector = FakeDetector(([(25.0, 40.0, 30.0, 40.0), 0.91],))
     client = TestClient(create_app(_deps(tmp_path, detector)))
 
@@ -120,12 +121,30 @@ def test_image_infer_returns_normalized_v26_boxes(tmp_path):
                 {
                     "label": "gecko",
                     "confidence": 0.91,
-                    "bbox": {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.4},
+                    "bbox": {"x": 0.25, "y": 0.4, "width": 0.3, "height": 0.4},
                 }
             ],
         }
     ]
     assert body["contribution_status"] == "not_requested"
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_infer_rejects_detector_coordinate_contract_mismatch(tmp_path):
+    detector = FakeDetector()
+    detector.bbox_coordinate_contract = "xywh-center-v1"
+    client = TestClient(create_app(_deps(tmp_path, detector)))
+
+    response = client.post(
+        "/v1/infer",
+        headers={"Authorization": "Bearer worker-token"},
+        data={"request_id": "req-contract", "training_consent": "false"},
+        files={"media": ("x.jpg", _jpeg(), "image/jpeg")},
+    )
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "inference unavailable"}
+    assert detector.calls == []
     assert list(tmp_path.iterdir()) == []
 
 

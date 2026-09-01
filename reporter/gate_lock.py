@@ -12,6 +12,7 @@ test_gate_lock.py 가 activity_worker._LOCK_PATH 와 동치 검증으로 잡는�
 from __future__ import annotations
 
 import fcntl
+import time
 
 # activity_worker._LOCK_PATH 와 반드시 동일해야 상호 배제가 성립한다(drift 테스트로 고정).
 COMMON_GATE_LOCK_PATH = "/tmp/petcam-activity-worker.lock"
@@ -26,6 +27,24 @@ def acquire_common_gate_lock(path: str = COMMON_GATE_LOCK_PATH):
     except BlockingIOError:
         fd.close()
         return None
+
+
+def wait_for_common_gate_lock(
+    *, timeout_sec: float, poll_interval_sec: float = 0.1,
+    path: str = COMMON_GATE_LOCK_PATH,
+):
+    """현재 batch 종료까지 bounded wait해서 공개 추론이 다음 batch보다 먼저 락을 잡게 한다."""
+    if timeout_sec < 0 or poll_interval_sec <= 0:
+        raise ValueError("lock wait timing must be positive")
+    deadline = time.monotonic() + timeout_sec
+    while True:
+        fd = acquire_common_gate_lock(path)
+        if fd is not None:
+            return fd
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None
+        time.sleep(min(poll_interval_sec, remaining))
 
 
 def release_common_gate_lock(fd) -> None:

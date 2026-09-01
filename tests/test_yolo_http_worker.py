@@ -12,6 +12,8 @@ warnings.filterwarnings("ignore", category=StarletteDeprecationWarning)
 from starlette.testclient import TestClient
 
 from gecko_vision_gate.gme_contracts import Detection
+from reporter import gate_lock
+from reporter import yolo_http_worker as worker
 from reporter.yolo_http_worker import WorkerDependencies, create_app
 
 
@@ -146,3 +148,59 @@ def test_video_decode_uses_at_most_10fps_and_releases_capture(tmp_path):
     assert response.json()["contribution_status"] == "candidate_only"
     assert capture.released is True
     assert list(tmp_path.iterdir()) == []
+
+
+def test_production_inference_waits_for_current_gme_batch(monkeypatch):
+    lock = object()
+    attempts = []
+
+    def acquire(_path):
+        attempts.append(1)
+        return lock if len(attempts) == 3 else None
+
+    class Clock:
+        now = 0.0
+
+        @classmethod
+        def monotonic(cls):
+            return cls.now
+
+        @classmethod
+        def sleep(cls, seconds):
+            cls.now += seconds
+
+    monkeypatch.setattr(gate_lock, "acquire_common_gate_lock", acquire)
+    monkeypatch.setattr(gate_lock, "time", Clock, raising=False)
+
+    assert worker._acquire_public_inference_lock() is lock
+    assert len(attempts) == 3
+    assert Clock.now > 0
+
+
+def test_public_inference_lock_wait_is_bounded(monkeypatch):
+    attempts = []
+
+    class Clock:
+        now = 0.0
+
+        @classmethod
+        def monotonic(cls):
+            return cls.now
+
+        @classmethod
+        def sleep(cls, seconds):
+            cls.now += seconds
+
+    monkeypatch.setattr(
+        gate_lock,
+        "acquire_common_gate_lock",
+        lambda _path: attempts.append(1),
+    )
+    monkeypatch.setattr(gate_lock, "time", Clock)
+
+    assert gate_lock.wait_for_common_gate_lock(
+        timeout_sec=0.25,
+        poll_interval_sec=0.1,
+    ) is None
+    assert len(attempts) == 4
+    assert Clock.now == 0.25

@@ -19,13 +19,14 @@ from starlette.datastructures import UploadFile
 
 from gecko_vision_gate.gme_temporal import AnalysisClock
 
-from reporter.gate_lock import acquire_common_gate_lock, release_common_gate_lock
+from reporter import gate_lock
 from reporter.gme_worker import _build_runtime_detector
 
 IMAGE_LIMIT = 10 * 1024 * 1024
 VIDEO_LIMIT = 50 * 1024 * 1024
 MODEL_VERSION = "v2.6-warm-start-s28"
 WARNING = "연구용 결과이며 오류 가능"
+PUBLIC_INFERENCE_LOCK_TIMEOUT_SEC = 120.0
 ALLOWED_MEDIA = {
     "image/jpeg": ("image", ".jpg"),
     "image/png": ("image", ".png"),
@@ -62,6 +63,12 @@ class _DetectorHolder:
 
 class _InferenceRejected(RuntimeError):
     pass
+
+
+def _acquire_public_inference_lock():
+    return gate_lock.wait_for_common_gate_lock(
+        timeout_sec=PUBLIC_INFERENCE_LOCK_TIMEOUT_SEC,
+    )
 
 
 def _copy_bounded(source, destination: Path, limit: int) -> int:
@@ -262,8 +269,8 @@ app = create_app(
         token=os.environ.get("YOLO_HTTP_WORKER_TOKEN", ""),
         detector_factory=_production_detector,
         capture_factory=cv2.VideoCapture,
-        acquire_lock=acquire_common_gate_lock,
-        release_lock=release_common_gate_lock,
+        acquire_lock=_acquire_public_inference_lock,
+        release_lock=gate_lock.release_common_gate_lock,
         now=lambda: datetime.now(timezone.utc),
     )
 )

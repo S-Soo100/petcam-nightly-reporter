@@ -14,6 +14,7 @@ NOW = datetime(2026, 8, 3, tzinfo=timezone.utc)
 V26_SHA = "a00e5a7a1e1f9197accb036339a38a7c821f03c8ab79611ebce89e5cde59b513"
 V26_FREEZE_SHA = "8f8e02beb452ec2ddfdce344dff507294f56136c69224990c50552d22bb343a0"
 V26_IDENTITY = "deccfc8315d3c00edb5bf59db3c573dca568e9d6d7a5da8d7dc93d2082bdb899"
+ALGORITHM_VERSION = "gme-motion-v1"
 V26_PROVENANCE = {
     "model_name": "yolo26n",
     "model_version": "v2.6-warm-start-s28",
@@ -34,7 +35,7 @@ V26_PROVENANCE = {
 
 
 def _job():
-    return GMEJob("job-1", "clip-1", "live", 100, "gme-shadow-v1", "gme-motion-v0", V26_IDENTITY, "processing", 1)
+    return GMEJob("job-1", "clip-1", "live", 100, "gme-shadow-v1", ALGORITHM_VERSION, V26_IDENTITY, "processing", 1)
 
 
 def _analysis():
@@ -42,7 +43,7 @@ def _analysis():
         duration_sec=1.0,
         intervals=(StateInterval(0.0, 1.0, "static", ("g0001",)),),
         tracking_quality=TrackingQuality.empty(),
-        artifact_identity=ArtifactIdentity("gme-shadow-v1", "gme-motion-v0", V26_IDENTITY),
+        artifact_identity=ArtifactIdentity("gme-shadow-v1", ALGORITHM_VERSION, V26_IDENTITY),
     )
     return replace(base, decoded_frame_count=30, analyzed_frame_count=30, source_fps=30.0)
 
@@ -59,6 +60,7 @@ def test_run_passes_configured_identity_to_claim_rpc(monkeypatch):
     monkeypatch.setattr(worker.config, "GME_ENABLED", True)
     monkeypatch.setattr(worker.config, "GME_EXPECTED_HOST", "expected")
     monkeypatch.setattr(worker.config, "GME_DETECTOR_IDENTITY", V26_IDENTITY)
+    monkeypatch.setattr(worker.config, "GME_ALGORITHM_VERSION", ALGORITHM_VERSION)
     monkeypatch.setattr(worker, "_validated_v26_engine_config", lambda: object())
     monkeypatch.setattr(worker, "operational_stats", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(worker, "allow_historical_claim", lambda *_args, **_kwargs: False)
@@ -75,6 +77,7 @@ def test_run_passes_configured_identity_to_claim_rpc(monkeypatch):
 
     assert rc == 0
     assert captured["detector_identity"] == V26_IDENTITY
+    assert captured["algorithm_version"] == ALGORITHM_VERSION
     assert captured["include_historical"] is False
 
 
@@ -144,6 +147,27 @@ def test_detector_identity_mismatch_is_terminal_before_media_download(tmp_path):
     assert list(tmp_path.iterdir()) == []
 
 
+def test_algorithm_mismatch_is_terminal_before_media_download(tmp_path):
+    calls = []
+    mismatched = replace(_job(), algorithm_version="gme-motion-v0")
+
+    stats = worker.process_jobs(
+        object(), [mismatched], {"clip-1": "terra-clips/clips/c.mp4"},
+        worker_host="host", now=NOW, temp_root=tmp_path,
+        download_fn=lambda *_args: calls.append("download"),
+        analyze_fn=lambda _path: _analysis(), serialize_fn=lambda _analysis: object(),
+        upload_fn=lambda **_kwargs: object(), insert_fn=lambda *_args: {"id": "run"},
+        complete_fn=lambda *_args, **_kwargs: None,
+        fail_fn=lambda *_args, **kwargs: calls.append(kwargs["failure_code"]),
+        producer=worker.Producer("host", "run", "code"),
+        detector_provenance=V26_PROVENANCE,
+    )
+
+    assert calls == ["invalid_metadata"]
+    assert stats["terminal"] == 1
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_run_payload_persists_exact_detector_inference_contract():
     payload = worker._run_payload(
         _job(), _analysis(), UploadedArtifacts("p", "b" * 64, 10, "d", "c" * 64, 20),
@@ -174,6 +198,7 @@ def test_runtime_detector_uses_exact_v26_yolo_contract(monkeypatch):
     monkeypatch.setattr(worker.config, "GME_CHECKPOINT_SHA256", V26_SHA)
     monkeypatch.setattr(worker.config, "GME_DETECTOR_FREEZE_SHA256", V26_FREEZE_SHA)
     monkeypatch.setattr(worker.config, "GME_DETECTOR_IDENTITY", V26_IDENTITY)
+    monkeypatch.setattr(worker.config, "GME_ALGORITHM_VERSION", ALGORITHM_VERSION)
     monkeypatch.setattr(worker.config, "GME_MODEL_VERSION", "v2.6-warm-start-s28")
     monkeypatch.setattr(worker.config, "GME_RAW_CONFIDENCE", 0.001)
     monkeypatch.setattr(worker.config, "GME_SCORE_THRESHOLD", 0.15)

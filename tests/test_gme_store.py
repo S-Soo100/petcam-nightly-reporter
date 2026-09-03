@@ -17,6 +17,7 @@ from reporter.gme_store import (
 
 NOW = datetime(2026, 8, 3, tzinfo=timezone.utc)
 V26_IDENTITY = "deccfc8315d3c00edb5bf59db3c573dca568e9d6d7a5da8d7dc93d2082bdb899"
+ALGORITHM_VERSION = "gme-motion-v1"
 
 
 class Result:
@@ -48,7 +49,7 @@ class SB:
 def _row(**changes):
     row = {
         "id": "job-1", "clip_id": "clip-1", "source": "live", "priority": 100,
-        "engine_schema_version": "gme-shadow-v1", "algorithm_version": "gme-motion-v0",
+        "engine_schema_version": "gme-shadow-v1", "algorithm_version": ALGORITHM_VERSION,
         "detector_identity": "a" * 64, "status": "processing", "attempt_count": 1,
     }
     row.update(changes)
@@ -56,18 +57,21 @@ def _row(**changes):
 
 
 def test_claim_uses_identity_isolated_rpc_and_frozen_job():
-    sb = SB({"fn_claim_gme_jobs_for_detector": [_row()]})
+    sb = SB({"fn_claim_gme_jobs_for_contract": [_row()]})
     jobs = claim_jobs(
         sb, limit=3, worker_host="host", now=NOW, include_historical=False,
-        detector_identity=V26_IDENTITY,
+        detector_identity=V26_IDENTITY, algorithm_version=ALGORITHM_VERSION,
+        engine_schema_version="gme-shadow-v1",
     )
     assert jobs == [GMEJob.from_row(_row())]
-    assert sb.calls == [("fn_claim_gme_jobs_for_detector", {
+    assert sb.calls == [("fn_claim_gme_jobs_for_contract", {
         "p_limit": 3,
         "p_worker_host": "host",
         "p_now": NOW.isoformat(),
         "p_include_historical": False,
         "p_detector_identity": V26_IDENTITY,
+        "p_algorithm_version": ALGORITHM_VERSION,
+        "p_engine_schema_version": "gme-shadow-v1",
     })]
     with pytest.raises(Exception):
         jobs[0].source = "historical"
@@ -78,7 +82,8 @@ def test_claim_rejects_invalid_identity_before_rpc():
     with pytest.raises(ValueError, match="lowercase SHA-256"):
         claim_jobs(
             sb, limit=1, worker_host="host", now=NOW, include_historical=True,
-            detector_identity="v2.6",
+            detector_identity="v2.6", algorithm_version=ALGORITHM_VERSION,
+            engine_schema_version="gme-shadow-v1",
         )
     assert sb.calls == []
 
@@ -103,11 +108,12 @@ def test_fail_rejects_non_allowlisted_code_before_rpc():
 
 
 def test_rpc_errors_are_redacted():
-    sb = SB({"fn_claim_gme_jobs_for_detector": RuntimeError("https://secret.invalid?key=secret")})
+    sb = SB({"fn_claim_gme_jobs_for_contract": RuntimeError("https://secret.invalid?key=secret")})
     with pytest.raises(GMEStoreError) as error:
         claim_jobs(
             sb, limit=1, worker_host="h", now=NOW, include_historical=True,
-            detector_identity=V26_IDENTITY,
+            detector_identity=V26_IDENTITY, algorithm_version=ALGORITHM_VERSION,
+            engine_schema_version="gme-shadow-v1",
         )
     assert "secret.invalid" not in str(error.value)
 

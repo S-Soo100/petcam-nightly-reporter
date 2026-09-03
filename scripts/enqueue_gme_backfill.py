@@ -17,7 +17,7 @@ from reporter import config, r2
 BACKFILL_START = datetime(2026, 7, 14, 15, 0, tzinfo=timezone.utc)  # KST 07-15 00:00
 MAX_BACKFILL_LIMIT = 50_000
 ENGINE_SCHEMA_VERSION = "gme-shadow-v1"
-ALGORITHM_VERSION = "gme-motion-v0"
+ALGORITHM_VERSION = "gme-motion-v1"
 EXCLUDED_SYSTEM_STATES = frozenset({"quarantined", "media_deleted"})
 EXCLUDED_CLEANUP_STATES = frozenset({"quarantined", "media_deleted", "source_missing"})
 INVENTORY_KEYS = (
@@ -109,7 +109,8 @@ def _existing_identity_clip_ids(sb, clip_ids: list[str], detector_identity: str)
     for table in ("gme_jobs", "gme_runs"):
         rows = (
             sb.table(table).select("clip_id").in_("clip_id", clip_ids)
-            .eq("detector_identity", detector_identity).execute().data or []
+            .eq("detector_identity", detector_identity)
+            .eq("algorithm_version", ALGORITHM_VERSION).execute().data or []
         )
         existing.update(row["clip_id"] for row in rows if row.get("clip_id"))
     return existing

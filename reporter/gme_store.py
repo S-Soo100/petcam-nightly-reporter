@@ -66,13 +66,21 @@ def claim_jobs(
     now: datetime,
     include_historical: bool,
     detector_identity: str,
+    algorithm_version: str,
+    engine_schema_version: str,
 ) -> list[GMEJob]:
     if re.fullmatch(r"[0-9a-f]{64}", detector_identity) is None:
         raise ValueError("detector identity must be a lowercase SHA-256")
-    rows = _rpc(sb, "fn_claim_gme_jobs_for_detector", {
+    if re.fullmatch(r"gme-motion-v[0-9]+", algorithm_version) is None:
+        raise ValueError("invalid GME algorithm version")
+    if engine_schema_version != "gme-shadow-v1":
+        raise ValueError("invalid GME engine schema version")
+    rows = _rpc(sb, "fn_claim_gme_jobs_for_contract", {
         "p_limit": limit, "p_worker_host": worker_host, "p_now": now.isoformat(),
         "p_include_historical": include_historical,
         "p_detector_identity": detector_identity,
+        "p_algorithm_version": algorithm_version,
+        "p_engine_schema_version": engine_schema_version,
     })
     return [GMEJob.from_row(row) for row in (rows or [])]
 

@@ -18,6 +18,7 @@ from scripts.enqueue_gme_backfill import (
 
 V25_IDENTITY = "d4654168af21d26697ab1bd9a5dc4a05bd92baf5c9328800915cc347803d05b6"
 V26_IDENTITY = "deccfc8315d3c00edb5bf59db3c573dca568e9d6d7a5da8d7dc93d2082bdb899"
+ALGORITHM_VERSION = "gme-motion-v1"
 
 
 def _row(**changes):
@@ -240,6 +241,8 @@ def test_existing_identity_lookup_unions_jobs_and_runs_with_exact_identity():
     } == {
         ("gme_jobs", "eq", "detector_identity", V26_IDENTITY),
         ("gme_runs", "eq", "detector_identity", V26_IDENTITY),
+        ("gme_jobs", "eq", "algorithm_version", ALGORITHM_VERSION),
+        ("gme_runs", "eq", "algorithm_version", ALGORITHM_VERSION),
     }
 
 
@@ -271,6 +274,7 @@ def test_backfill_enqueues_each_keyset_page_as_bounded_rpc():
     assert (selected, enqueued) == (3, 3)
     assert [len(args["p_clip_ids"]) for _, args in client.calls] == [2, 1]
     assert {args["p_detector_identity"] for _, args in client.calls} == {V25_IDENTITY}
+    assert {args["p_algorithm_version"] for _, args in client.calls} == {ALGORITHM_VERSION}
 
 
 def test_enqueue_rejects_non_sha_detector_identity_before_rpc():

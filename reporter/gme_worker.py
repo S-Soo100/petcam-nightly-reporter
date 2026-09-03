@@ -13,7 +13,12 @@ from supabase import create_client
 
 from gecko_vision_gate.gme_contracts import GMEConfig
 from gecko_vision_gate.gme_detector import build_detector
-from gecko_vision_gate.gme_engine import analyze_clip, detector_identity
+from gecko_vision_gate.gme_engine import (
+    ALGORITHM_VERSION,
+    ENGINE_SCHEMA_VERSION,
+    analyze_clip,
+    detector_identity,
+)
 from gecko_vision_gate.gme_serialization import serialize_artifacts
 from gecko_vision_gate.gme_yolo_detector import build_yolo_detector
 
@@ -140,6 +145,7 @@ def _validated_v26_engine_config() -> GMEConfig:
         "GME_CHECKPOINT_SHA256": V26_CHECKPOINT_SHA256,
         "GME_DETECTOR_FREEZE_SHA256": V26_DETECTOR_FREEZE_SHA256,
         "GME_DETECTOR_IDENTITY": V26_DETECTOR_IDENTITY,
+        "GME_ALGORITHM_VERSION": "gme-motion-v1",
         "GME_MODEL_VERSION": "v2.6-warm-start-s28",
         "GME_RAW_CONFIDENCE": 0.001,
         "GME_SCORE_THRESHOLD": 0.15,
@@ -158,7 +164,8 @@ def _validated_v26_engine_config() -> GMEConfig:
             raise ValueError(f"v2.6 contract mismatch: {name}")
     engine_config = GMEConfig.v26()
     if (
-        engine_config.analysis_fps != config.GME_ANALYSIS_FPS
+        ALGORITHM_VERSION != config.GME_ALGORITHM_VERSION
+        or engine_config.analysis_fps != config.GME_ANALYSIS_FPS
         or engine_config.anchor_interval_sec != config.GME_ANCHOR_INTERVAL_SEC
         or engine_config.detection_window_frames != config.GME_TEMPORAL_WINDOW_FRAMES
         or engine_config.detection_min_positive_frames != config.GME_TEMPORAL_MIN_POSITIVE_FRAMES
@@ -177,7 +184,11 @@ def process_jobs(
     stats = {"jobs": len(jobs), "succeeded": 0, "failed": 0, "terminal": 0, "stale": 0}
     for job in jobs:
         try:
-            if job.detector_identity != detector_provenance.get("detector_identity"):
+            if (
+                job.engine_schema_version != ENGINE_SCHEMA_VERSION
+                or job.algorithm_version != ALGORITHM_VERSION
+                or job.detector_identity != detector_provenance.get("detector_identity")
+            ):
                 raise _JobFailure("invalid_metadata", retryable=False)
             key = clip_keys.get(job.clip_id)
             if not key:
@@ -199,7 +210,11 @@ def process_jobs(
                 if analysis.status != "ok":
                     code = "decode_no_frames" if analysis.status == "no_decodable_frames" else "invalid_metadata"
                     raise _JobFailure(code, retryable=False)
-                if analysis.artifact_identity.detector_identity != job.detector_identity:
+                if (
+                    analysis.artifact_identity.engine_schema_version != job.engine_schema_version
+                    or analysis.artifact_identity.algorithm_version != job.algorithm_version
+                    or analysis.artifact_identity.detector_identity != job.detector_identity
+                ):
                     raise _JobFailure("gme_compute_failed", retryable=False)
                 serialized = serialize_fn(analysis)
                 try:
@@ -267,7 +282,9 @@ def run(
         include_historical = allow_historical_claim(queue_stats, max_live_lag_sec=config.GME_MAX_LIVE_LAG_SEC)
         jobs = claim_jobs(sb, limit=config.GME_BATCH_LIMIT, worker_host=host, now=now,
                           include_historical=include_historical,
-                          detector_identity=config.GME_DETECTOR_IDENTITY)
+                          detector_identity=config.GME_DETECTOR_IDENTITY,
+                          algorithm_version=config.GME_ALGORITHM_VERSION,
+                          engine_schema_version=ENGINE_SCHEMA_VERSION)
         if not jobs:
             print("[gme] no jobs — skip")
             return 0
@@ -276,7 +293,7 @@ def run(
         if detector_provenance.get("detector_identity") != config.GME_DETECTOR_IDENTITY:
             print("[gme] detector execution identity mismatch", file=sys.stderr)
             return 2
-        producer = Producer(host, now.strftime("%Y%m%dT%H%M%S"), "gme-worker/gme-motion-v0")
+        producer = Producer(host, now.strftime("%Y%m%dT%H%M%S"), "gme-worker/gme-motion-v1")
         stats = process_jobs(
             sb, jobs, clip_keys, worker_host=host, now=now, temp_root=None,
             download_fn=r2.download_clip,

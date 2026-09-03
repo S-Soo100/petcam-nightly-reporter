@@ -120,8 +120,26 @@ def insert_run(sb, payload: dict) -> dict:
     return row
 
 
-def operational_stats(sb, *, now: datetime) -> dict:
-    value = _rpc(sb, "fn_gme_operational_stats", {"p_now": now.isoformat()})
+def operational_stats(
+    sb,
+    *,
+    now: datetime,
+    detector_identity: str,
+    algorithm_version: str,
+    engine_schema_version: str,
+) -> dict:
+    if re.fullmatch(r"[0-9a-f]{64}", detector_identity) is None:
+        raise ValueError("detector identity must be a lowercase SHA-256")
+    if re.fullmatch(r"gme-motion-v[0-9]+", algorithm_version) is None:
+        raise ValueError("invalid GME algorithm version")
+    if engine_schema_version != "gme-shadow-v1":
+        raise ValueError("invalid GME engine schema version")
+    value = _rpc(sb, "fn_gme_operational_stats_for_contract", {
+        "p_now": now.isoformat(),
+        "p_detector_identity": detector_identity,
+        "p_algorithm_version": algorithm_version,
+        "p_engine_schema_version": engine_schema_version,
+    })
     if not isinstance(value, dict):
         raise GMEStoreError("operational stats malformed")
     return value

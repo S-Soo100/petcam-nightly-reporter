@@ -62,7 +62,11 @@ def test_run_passes_configured_identity_to_claim_rpc(monkeypatch):
     monkeypatch.setattr(worker.config, "GME_DETECTOR_IDENTITY", V26_IDENTITY)
     monkeypatch.setattr(worker.config, "GME_ALGORITHM_VERSION", ALGORITHM_VERSION)
     monkeypatch.setattr(worker, "_validated_v26_engine_config", lambda: object())
-    monkeypatch.setattr(worker, "operational_stats", lambda *_args, **_kwargs: {})
+    def fake_operational_stats(_sb, **kwargs):
+        captured["stats_contract"] = kwargs
+        return {}
+
+    monkeypatch.setattr(worker, "operational_stats", fake_operational_stats)
     monkeypatch.setattr(worker, "allow_historical_claim", lambda *_args, **_kwargs: False)
 
     def fake_claim(_sb, **kwargs):
@@ -71,7 +75,7 @@ def test_run_passes_configured_identity_to_claim_rpc(monkeypatch):
 
     monkeypatch.setattr(worker, "claim_jobs", fake_claim)
     rc = worker.run(
-        sb_factory=lambda: object(), hostname_fn=lambda: "expected",
+        sb_factory=lambda: object(), hostname_fn=lambda: "expected", now=NOW,
         acquire_lock_fn=lambda: object(), release_lock_fn=lambda _lock: None,
     )
 
@@ -79,6 +83,12 @@ def test_run_passes_configured_identity_to_claim_rpc(monkeypatch):
     assert captured["detector_identity"] == V26_IDENTITY
     assert captured["algorithm_version"] == ALGORITHM_VERSION
     assert captured["include_historical"] is False
+    assert captured["stats_contract"] == {
+        "now": NOW,
+        "detector_identity": V26_IDENTITY,
+        "algorithm_version": ALGORITHM_VERSION,
+        "engine_schema_version": "gme-shadow-v1",
+    }
 
 
 def test_process_jobs_downloads_analyzes_uploads_inserts_and_completes_once(tmp_path):

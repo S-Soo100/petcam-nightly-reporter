@@ -278,7 +278,13 @@ def run(
             return 2
         sb_factory = sb_factory or (lambda: create_client(config.SUPABASE_URL, config.SUPABASE_KEY))
         sb = sb_factory()
-        queue_stats = operational_stats(sb, now=now)
+        queue_stats = operational_stats(
+            sb,
+            now=now,
+            detector_identity=config.GME_DETECTOR_IDENTITY,
+            algorithm_version=config.GME_ALGORITHM_VERSION,
+            engine_schema_version=ENGINE_SCHEMA_VERSION,
+        )
         include_historical = allow_historical_claim(queue_stats, max_live_lag_sec=config.GME_MAX_LIVE_LAG_SEC)
         jobs = claim_jobs(sb, limit=config.GME_BATCH_LIMIT, worker_host=host, now=now,
                           include_historical=include_historical,

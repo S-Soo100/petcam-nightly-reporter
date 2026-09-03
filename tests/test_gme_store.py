@@ -12,6 +12,7 @@ from reporter.gme_store import (
     complete_job,
     fail_job,
     insert_run,
+    operational_stats,
 )
 
 
@@ -86,6 +87,27 @@ def test_claim_rejects_invalid_identity_before_rpc():
             engine_schema_version="gme-shadow-v1",
         )
     assert sb.calls == []
+
+
+def test_operational_stats_are_isolated_to_the_active_contract():
+    expected = {"oldest_live_age_sec": 0, "queued_live": 0, "queued_historical": 7}
+    sb = SB({"fn_gme_operational_stats_for_contract": expected})
+
+    actual = operational_stats(
+        sb,
+        now=NOW,
+        detector_identity=V26_IDENTITY,
+        algorithm_version=ALGORITHM_VERSION,
+        engine_schema_version="gme-shadow-v1",
+    )
+
+    assert actual == expected
+    assert sb.calls == [("fn_gme_operational_stats_for_contract", {
+        "p_now": NOW.isoformat(),
+        "p_detector_identity": V26_IDENTITY,
+        "p_algorithm_version": ALGORITHM_VERSION,
+        "p_engine_schema_version": "gme-shadow-v1",
+    })]
 
 
 def test_job_rejects_unknown_source_or_status_before_processing():

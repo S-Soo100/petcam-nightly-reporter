@@ -37,12 +37,21 @@ REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 }
 [ "$DETECTOR_BACKEND" = "yolo26n" ] || { echo "GME_DETECTOR_BACKEND must be yolo26n" >&2; exit 1; }
 [[ "$CHECKPOINT_PATH" = /* ]] || { echo "GME_CHECKPOINT_PATH must be absolute" >&2; exit 1; }
-[ "$CHECKPOINT_SHA256" = "a00e5a7a1e1f9197accb036339a38a7c821f03c8ab79611ebce89e5cde59b513" ] || { echo "GME_CHECKPOINT_SHA256 must be approved v2.6" >&2; exit 1; }
-[ "$DETECTOR_FREEZE_SHA256" = "8f8e02beb452ec2ddfdce344dff507294f56136c69224990c50552d22bb343a0" ] || { echo "GME_DETECTOR_FREEZE_SHA256 must be approved v2.6" >&2; exit 1; }
-[ "$DETECTOR_IDENTITY" = "deccfc8315d3c00edb5bf59db3c573dca568e9d6d7a5da8d7dc93d2082bdb899" ] || { echo "GME_DETECTOR_IDENTITY must be approved v2.6 coordinate contract" >&2; exit 1; }
-[ "$MODEL_VERSION" = "v2.6-warm-start-s28" ] || { echo "GME_MODEL_VERSION must be v2.6-warm-start-s28" >&2; exit 1; }
+case "$MODEL_VERSION" in
+  v2.6-warm-start-s28)
+    APPROVED_SHA="a00e5a7a1e1f9197accb036339a38a7c821f03c8ab79611ebce89e5cde59b513"
+    APPROVED_FREEZE="8f8e02beb452ec2ddfdce344dff507294f56136c69224990c50552d22bb343a0"
+    APPROVED_IDENTITY="deccfc8315d3c00edb5bf59db3c573dca568e9d6d7a5da8d7dc93d2082bdb899"
+    APPROVED_THRESHOLD="0.15" ;;
+  v2.6.1-warm-start-s27)
+    APPROVED_SHA="313e933b623561027af9368244c16e8960c74d9b66ec1b919c8d3b58c0ff1c96"
+    APPROVED_FREEZE="a0c9d8305ee263a4302f7a0c0fc04a04e75b47b00815d91c088f56df42438bef"
+    APPROVED_IDENTITY="44dd382cba74355c98eff3c202acf1b1195d92870c50ac86f4fafa4c75aed92e"
+    APPROVED_THRESHOLD="0.30" ;;
+  *) echo "unapproved GME model version" >&2; exit 1 ;;
+esac
+[ "$CHECKPOINT_SHA256" = "$APPROVED_SHA" ] && [ "$DETECTOR_FREEZE_SHA256" = "$APPROVED_FREEZE" ] && [ "$DETECTOR_IDENTITY" = "$APPROVED_IDENTITY" ] && [ "$SCORE_THRESHOLD" = "$APPROVED_THRESHOLD" ] || { echo "GME model contract mismatch" >&2; exit 1; }
 [ "$RAW_CONFIDENCE" = "0.001" ] || { echo "GME_RAW_CONFIDENCE must be 0.001" >&2; exit 1; }
-[ "$SCORE_THRESHOLD" = "0.15" ] || { echo "GME_SCORE_THRESHOLD must be 0.15" >&2; exit 1; }
 [ "$IMAGE_SIZE" = "960" ] || { echo "GME_IMAGE_SIZE must be 960" >&2; exit 1; }
 [ "$NMS_IOU" = "0.70" ] || { echo "GME_NMS_IOU must be 0.70" >&2; exit 1; }
 [ "$POST_NMS_IOU" = "0.55" ] || { echo "GME_POST_NMS_IOU must be 0.55" >&2; exit 1; }

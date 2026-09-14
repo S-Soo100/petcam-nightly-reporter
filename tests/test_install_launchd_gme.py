@@ -119,3 +119,22 @@ def test_installer_rejects_missing_detector_identity(tmp_path):
     result, home = _run(tmp_path / "missing-identity", env)
     assert result.returncode != 0
     assert not list(home.rglob("*.plist"))
+
+
+def test_installer_accepts_v261_and_rejects_mixed_contract(tmp_path):
+    import plistlib
+    env = {**_v26_env(),
+        "GME_MODEL_VERSION": "v2.6.1-warm-start-s27",
+        "GME_CHECKPOINT_SHA256": "313e933b623561027af9368244c16e8960c74d9b66ec1b919c8d3b58c0ff1c96",
+        "GME_DETECTOR_FREEZE_SHA256": "a0c9d8305ee263a4302f7a0c0fc04a04e75b47b00815d91c088f56df42438bef",
+        "GME_DETECTOR_IDENTITY": "44dd382cba74355c98eff3c202acf1b1195d92870c50ac86f4fafa4c75aed92e",
+        "GME_SCORE_THRESHOLD": "0.30",
+    }
+    result, home = _run(tmp_path / "good", env)
+    assert result.returncode == 0, result.stderr
+    actual = plistlib.loads(next(home.rglob("*.plist")).read_bytes())["EnvironmentVariables"]
+    assert actual["GME_MODEL_VERSION"] == "v2.6.1-warm-start-s27"
+    for key in ("GME_MODEL_VERSION", "GME_CHECKPOINT_SHA256", "GME_DETECTOR_FREEZE_SHA256", "GME_DETECTOR_IDENTITY", "GME_SCORE_THRESHOLD"):
+        result, home = _run(tmp_path / key, {**env, key: _v26_env()[key]})
+        assert result.returncode != 0
+        assert not list(home.rglob("*.plist"))

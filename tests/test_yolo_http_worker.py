@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import warnings
+from dataclasses import replace
 from datetime import datetime, timezone
 
 import cv2
@@ -63,6 +64,27 @@ class FakeCapture:
 
     def release(self):
         self.released = True
+
+
+def test_response_reports_actual_detector_version(tmp_path):
+    detector = FakeDetector()
+    detector.model_version = "v2.6.1-warm-start-s27"
+    client = TestClient(create_app(replace(_deps(tmp_path, detector), expected_model_version="v2.6.1-warm-start-s27")))
+    response = client.post(
+        "/v1/infer", headers={"Authorization": "Bearer worker-token"},
+        data={"request_id": "v261-test", "training_consent": "false"},
+        files={"media": ("test.jpg", _jpeg(), "image/jpeg")},
+    )
+    assert response.status_code == 200
+    assert response.json()["model_version"] == "v2.6.1-warm-start-s27"
+    assert client.get("/health").json()["model_version"] == "v2.6.1-warm-start-s27"
+    detector.model_version = "v2.6-warm-start-s28"
+    response = client.post(
+        "/v1/infer", headers={"Authorization": "Bearer worker-token"},
+        data={"request_id": "v261-mismatch", "training_consent": "false"},
+        files={"media": ("test.jpg", _jpeg(), "image/jpeg")},
+    )
+    assert response.status_code == 503
 
 
 def _jpeg(width=100, height=100):

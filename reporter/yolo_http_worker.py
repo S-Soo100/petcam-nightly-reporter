@@ -19,12 +19,12 @@ from starlette.datastructures import UploadFile
 
 from gecko_vision_gate.gme_temporal import AnalysisClock
 
-from reporter import gate_lock
+from reporter import config, gate_lock
 from reporter.gme_worker import _build_runtime_detector
 
 IMAGE_LIMIT = 10 * 1024 * 1024
 VIDEO_LIMIT = 50 * 1024 * 1024
-MODEL_VERSION = "v2.6-warm-start-s28"
+MODEL_VERSION = config.GME_MODEL_VERSION
 BBOX_COORDINATE_CONTRACT = "xywh-top-left-v1"
 WARNING = "연구용 결과이며 오류 가능"
 PUBLIC_INFERENCE_LOCK_TIMEOUT_SEC = 120.0
@@ -46,6 +46,7 @@ class WorkerDependencies:
     release_lock: Callable[[object | None], None]
     now: Callable[[], datetime]
     temp_root: Path | None = None
+    expected_model_version: str = MODEL_VERSION
 
 
 class _DetectorHolder:
@@ -187,7 +188,7 @@ def _infer(path: Path, media_kind: str, holder: _DetectorHolder, deps: WorkerDep
         raise _InferenceRejected("detector_busy")
     try:
         detector = holder.get()
-        if getattr(detector, "model_version", None) != MODEL_VERSION:
+        if getattr(detector, "model_version", None) != deps.expected_model_version:
             raise _InferenceRejected("model_version_mismatch")
         if getattr(detector, "bbox_coordinate_contract", None) != BBOX_COORDINATE_CONTRACT:
             raise _InferenceRejected("bbox_coordinate_contract_mismatch")
@@ -204,7 +205,7 @@ def create_app(deps: WorkerDependencies) -> FastAPI:
 
     @app.get("/health")
     def health() -> dict:
-        return {"status": "ok", "model_version": MODEL_VERSION}
+        return {"status": "ok", "model_version": deps.expected_model_version}
 
     @app.post("/v1/infer")
     async def infer(request: Request):
@@ -251,7 +252,7 @@ def create_app(deps: WorkerDependencies) -> FastAPI:
         return {
             "request_id": request_id,
             "media_kind": media_kind,
-            "model_version": MODEL_VERSION,
+            "model_version": deps.expected_model_version,
             "provider_mode": "worker",
             "processed_at": deps.now().astimezone(timezone.utc).isoformat(),
             "warning": WARNING,

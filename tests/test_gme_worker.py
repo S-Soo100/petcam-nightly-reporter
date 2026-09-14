@@ -55,6 +55,28 @@ def test_disabled_worker_has_zero_side_effects(monkeypatch):
     assert called == []
 
 
+def test_v261_runtime_contract_is_accepted_and_mixed_identity_rejected(monkeypatch):
+    import pytest
+    values = {
+        "GME_DETECTOR_BACKEND": "yolo26n", "GME_ALGORITHM_VERSION": "gme-motion-v1",
+        "GME_MODEL_VERSION": "v2.6.1-warm-start-s27",
+        "GME_CHECKPOINT_SHA256": "313e933b623561027af9368244c16e8960c74d9b66ec1b919c8d3b58c0ff1c96",
+        "GME_DETECTOR_FREEZE_SHA256": "a0c9d8305ee263a4302f7a0c0fc04a04e75b47b00815d91c088f56df42438bef",
+        "GME_DETECTOR_IDENTITY": "44dd382cba74355c98eff3c202acf1b1195d92870c50ac86f4fafa4c75aed92e",
+        "GME_RAW_CONFIDENCE": .001, "GME_SCORE_THRESHOLD": .30,
+        "GME_IMAGE_SIZE": 960, "GME_NMS_IOU": .70, "GME_POST_NMS_IOU": .55,
+        "GME_MAX_DETECTIONS": 50, "GME_ANALYSIS_FPS": 10.,
+        "GME_ANCHOR_INTERVAL_SEC": .1, "GME_TEMPORAL_WINDOW_FRAMES": 5,
+        "GME_TEMPORAL_MIN_POSITIVE_FRAMES": 3, "GME_DEVICE": "mps",
+    }
+    for key, value in values.items():
+        monkeypatch.setattr(worker.config, key, value)
+    assert worker._validated_v26_engine_config().analysis_fps == 10.0
+    monkeypatch.setattr(worker.config, "GME_DETECTOR_IDENTITY", V26_IDENTITY)
+    with pytest.raises(ValueError):
+        worker._validated_v26_engine_config()
+
+
 def test_run_passes_configured_identity_to_claim_rpc(monkeypatch):
     captured = {}
     monkeypatch.setattr(worker.config, "GME_ENABLED", True)

@@ -138,7 +138,7 @@ def _build_runtime_detector():
 
 
 def _validated_v26_engine_config() -> GMEConfig:
-    """DB/R2 접근 전에 승인된 v2.6 실행값과 로컬 Gate 계약을 함께 검증한다."""
+    """DB/R2 접근 전에 승인된 detector와 기존 GME 활동시간 계약을 검증한다."""
 
     expected = {
         "GME_DETECTOR_BACKEND": "yolo26n",
@@ -159,9 +159,17 @@ def _validated_v26_engine_config() -> GMEConfig:
         "GME_TEMPORAL_MIN_POSITIVE_FRAMES": 3,
         "GME_DEVICE": "mps",
     }
+    if config.GME_MODEL_VERSION == "v2.6.1-warm-start-s27":
+        expected.update({
+            "GME_MODEL_VERSION": "v2.6.1-warm-start-s27",
+            "GME_CHECKPOINT_SHA256": "313e933b623561027af9368244c16e8960c74d9b66ec1b919c8d3b58c0ff1c96",
+            "GME_DETECTOR_FREEZE_SHA256": "a0c9d8305ee263a4302f7a0c0fc04a04e75b47b00815d91c088f56df42438bef",
+            "GME_DETECTOR_IDENTITY": "44dd382cba74355c98eff3c202acf1b1195d92870c50ac86f4fafa4c75aed92e",
+            "GME_SCORE_THRESHOLD": 0.30,
+        })
     for name, value in expected.items():
         if getattr(config, name) != value:
-            raise ValueError(f"v2.6 contract mismatch: {name}")
+            raise ValueError(f"approved YOLO contract mismatch: {name}")
     engine_config = GMEConfig.v26()
     if (
         ALGORITHM_VERSION != config.GME_ALGORITHM_VERSION

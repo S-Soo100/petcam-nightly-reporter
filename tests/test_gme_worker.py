@@ -291,3 +291,63 @@ def test_unsupported_detector_backend_stops_before_db(monkeypatch):
 
     assert rc == 2
     assert calls == ["unlock"]
+
+
+# ── gme-motion-v2 (2026-09-23): 추적 연결 완화 + v2.6.1 threshold 0.15 ──
+
+V261_015_IDENTITY = "81688d0a5ae61299e569573bbc7429bbe362ef9f086cd1cf3e699f9c18c5de2c"
+
+
+def _v261_values(**over):
+    values = {
+        "GME_DETECTOR_BACKEND": "yolo26n", "GME_ALGORITHM_VERSION": "gme-motion-v1",
+        "GME_MODEL_VERSION": "v2.6.1-warm-start-s27",
+        "GME_CHECKPOINT_SHA256": "313e933b623561027af9368244c16e8960c74d9b66ec1b919c8d3b58c0ff1c96",
+        "GME_DETECTOR_FREEZE_SHA256": "a0c9d8305ee263a4302f7a0c0fc04a04e75b47b00815d91c088f56df42438bef",
+        "GME_DETECTOR_IDENTITY": "44dd382cba74355c98eff3c202acf1b1195d92870c50ac86f4fafa4c75aed92e",
+        "GME_RAW_CONFIDENCE": .001, "GME_SCORE_THRESHOLD": .30,
+        "GME_IMAGE_SIZE": 960, "GME_NMS_IOU": .70, "GME_POST_NMS_IOU": .55,
+        "GME_MAX_DETECTIONS": 50, "GME_ANALYSIS_FPS": 10.,
+        "GME_ANCHOR_INTERVAL_SEC": .1, "GME_TEMPORAL_WINDOW_FRAMES": 5,
+        "GME_TEMPORAL_MIN_POSITIVE_FRAMES": 3, "GME_DEVICE": "mps",
+    }
+    values.update(over)
+    return values
+
+
+def test_v2_contract_uses_link_engine_and_015_identity(monkeypatch):
+    for key, value in _v261_values(GME_ALGORITHM_VERSION="gme-motion-v2", GME_SCORE_THRESHOLD=.15,
+                                   GME_DETECTOR_IDENTITY=V261_015_IDENTITY).items():
+        monkeypatch.setattr(worker.config, key, value)
+    cfg = worker._validated_v26_engine_config()
+    assert cfg.track_max_missed_sec == 1.0 and cfg.fill_track_gaps is True
+
+
+def test_v2_algorithm_with_030_threshold_is_also_allowed(monkeypatch):
+    for key, value in _v261_values(GME_ALGORITHM_VERSION="gme-motion-v2").items():
+        monkeypatch.setattr(worker.config, key, value)
+    assert worker._validated_v26_engine_config().track_max_missed_sec == 1.0
+
+
+def test_015_threshold_with_old_identity_is_rejected(monkeypatch):
+    import pytest
+    for key, value in _v261_values(GME_ALGORITHM_VERSION="gme-motion-v2", GME_SCORE_THRESHOLD=.15).items():
+        monkeypatch.setattr(worker.config, key, value)
+    with pytest.raises(ValueError):
+        worker._validated_v26_engine_config()
+
+
+def test_unknown_algorithm_version_rejected(monkeypatch):
+    import pytest
+    for key, value in _v261_values(GME_ALGORITHM_VERSION="gme-motion-v9").items():
+        monkeypatch.setattr(worker.config, key, value)
+    with pytest.raises(ValueError):
+        worker._validated_v26_engine_config()
+
+
+def test_process_jobs_accepts_configured_v2_jobs(monkeypatch):
+    monkeypatch.setattr(worker.config, "GME_ALGORITHM_VERSION", "gme-motion-v2")
+    job = GMEJob("job-2", "clip-2", "live", 100, "gme-shadow-v1", "gme-motion-v2", V26_IDENTITY, "processing", 1)
+    assert worker._job_contract_ok(job, {"detector_identity": V26_IDENTITY})
+    v1_job = GMEJob("job-3", "clip-3", "live", 100, "gme-shadow-v1", "gme-motion-v1", V26_IDENTITY, "processing", 1)
+    assert not worker._job_contract_ok(v1_job, {"detector_identity": V26_IDENTITY})

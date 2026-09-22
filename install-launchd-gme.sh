@@ -24,6 +24,7 @@ ANCHOR_INTERVAL_SEC="${GME_ANCHOR_INTERVAL_SEC:-}"
 TEMPORAL_WINDOW_FRAMES="${GME_TEMPORAL_WINDOW_FRAMES:-}"
 TEMPORAL_MIN_POSITIVE_FRAMES="${GME_TEMPORAL_MIN_POSITIVE_FRAMES:-}"
 DEVICE="${GME_DEVICE:-}"
+ALGORITHM_VERSION="${GME_ALGORITHM_VERSION:-gme-motion-v1}"
 ACTUAL_HOST="$(hostname)"
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -46,8 +47,14 @@ case "$MODEL_VERSION" in
   v2.6.1-warm-start-s27)
     APPROVED_SHA="313e933b623561027af9368244c16e8960c74d9b66ec1b919c8d3b58c0ff1c96"
     APPROVED_FREEZE="a0c9d8305ee263a4302f7a0c0fc04a04e75b47b00815d91c088f56df42438bef"
-    APPROVED_IDENTITY="44dd382cba74355c98eff3c202acf1b1195d92870c50ac86f4fafa4c75aed92e"
-    APPROVED_THRESHOLD="0.30" ;;
+    # threshold 가 detector identity 해시에 들어가 기준별로 승인한다(0.15 = 2026-09-23 gme-motion-v2 전환).
+    if [ "$SCORE_THRESHOLD" = "0.15" ]; then
+      APPROVED_IDENTITY="81688d0a5ae61299e569573bbc7429bbe362ef9f086cd1cf3e699f9c18c5de2c"
+      APPROVED_THRESHOLD="0.15"
+    else
+      APPROVED_IDENTITY="44dd382cba74355c98eff3c202acf1b1195d92870c50ac86f4fafa4c75aed92e"
+      APPROVED_THRESHOLD="0.30"
+    fi ;;
   *) echo "unapproved GME model version" >&2; exit 1 ;;
 esac
 [ "$CHECKPOINT_SHA256" = "$APPROVED_SHA" ] && [ "$DETECTOR_FREEZE_SHA256" = "$APPROVED_FREEZE" ] && [ "$DETECTOR_IDENTITY" = "$APPROVED_IDENTITY" ] && [ "$SCORE_THRESHOLD" = "$APPROVED_THRESHOLD" ] || { echo "GME model contract mismatch" >&2; exit 1; }
@@ -61,6 +68,7 @@ esac
 [ "$TEMPORAL_WINDOW_FRAMES" = "5" ] || { echo "GME_TEMPORAL_WINDOW_FRAMES must be 5" >&2; exit 1; }
 [ "$TEMPORAL_MIN_POSITIVE_FRAMES" = "3" ] || { echo "GME_TEMPORAL_MIN_POSITIVE_FRAMES must be 3" >&2; exit 1; }
 [ "$DEVICE" = "mps" ] || { echo "GME_DEVICE must be mps" >&2; exit 1; }
+case "$ALGORITHM_VERSION" in gme-motion-v1|gme-motion-v2) ;; *) echo "unapproved GME_ALGORITHM_VERSION" >&2; exit 1 ;; esac
 
 UV_BIN="$(command -v uv || true)"
 [ -n "$UV_BIN" ] || { echo "uv missing" >&2; exit 1; }
@@ -103,6 +111,7 @@ cat > "$PLIST" <<PLIST
     <key>GME_TEMPORAL_WINDOW_FRAMES</key><string>$TEMPORAL_WINDOW_FRAMES</string>
     <key>GME_TEMPORAL_MIN_POSITIVE_FRAMES</key><string>$TEMPORAL_MIN_POSITIVE_FRAMES</string>
     <key>GME_DEVICE</key><string>$DEVICE</string>
+    <key>GME_ALGORITHM_VERSION</key><string>$ALGORITHM_VERSION</string>
   </dict>
 </dict></plist>
 PLIST

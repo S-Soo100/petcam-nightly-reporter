@@ -138,3 +138,40 @@ def test_installer_accepts_v261_and_rejects_mixed_contract(tmp_path):
         result, home = _run(tmp_path / key, {**env, key: _v26_env()[key]})
         assert result.returncode != 0
         assert not list(home.rglob("*.plist"))
+
+
+def _v261_env(**over):
+    env = {**_v26_env(),
+        "GME_MODEL_VERSION": "v2.6.1-warm-start-s27",
+        "GME_CHECKPOINT_SHA256": "313e933b623561027af9368244c16e8960c74d9b66ec1b919c8d3b58c0ff1c96",
+        "GME_DETECTOR_FREEZE_SHA256": "a0c9d8305ee263a4302f7a0c0fc04a04e75b47b00815d91c088f56df42438bef",
+        "GME_DETECTOR_IDENTITY": "44dd382cba74355c98eff3c202acf1b1195d92870c50ac86f4fafa4c75aed92e",
+        "GME_SCORE_THRESHOLD": "0.30",
+    }
+    env.update(over)
+    return env
+
+
+def test_installer_v2_with_015_identity_writes_algorithm_version(tmp_path):
+    import plistlib
+    env = _v261_env(GME_ALGORITHM_VERSION="gme-motion-v2", GME_SCORE_THRESHOLD="0.15",
+                    GME_DETECTOR_IDENTITY="81688d0a5ae61299e569573bbc7429bbe362ef9f086cd1cf3e699f9c18c5de2c")
+    result, home = _run(tmp_path / "v2", env)
+    assert result.returncode == 0, result.stderr
+    actual = plistlib.loads(next(home.rglob("*.plist")).read_bytes())["EnvironmentVariables"]
+    assert actual["GME_ALGORITHM_VERSION"] == "gme-motion-v2"
+    assert actual["GME_SCORE_THRESHOLD"] == "0.15"
+
+
+def test_installer_defaults_algorithm_to_v1_and_rejects_unknown(tmp_path):
+    import plistlib
+    result, home = _run(tmp_path / "default", _v261_env())
+    assert result.returncode == 0, result.stderr
+    assert plistlib.loads(next(home.rglob("*.plist")).read_bytes())["EnvironmentVariables"]["GME_ALGORITHM_VERSION"] == "gme-motion-v1"
+    result, home = _run(tmp_path / "bad", _v261_env(GME_ALGORITHM_VERSION="gme-motion-v9"))
+    assert result.returncode != 0 and not list(home.rglob("*.plist"))
+
+
+def test_installer_rejects_015_threshold_with_030_identity(tmp_path):
+    result, home = _run(tmp_path / "mixed", _v261_env(GME_SCORE_THRESHOLD="0.15"))
+    assert result.returncode != 0 and not list(home.rglob("*.plist"))

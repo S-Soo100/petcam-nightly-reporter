@@ -14,8 +14,8 @@ from supabase import create_client
 from gecko_vision_gate.gme_contracts import GMEConfig
 from gecko_vision_gate.gme_detector import build_detector
 from gecko_vision_gate.gme_engine import (
-    ALGORITHM_VERSION,
     ENGINE_SCHEMA_VERSION,
+    algorithm_version_for,
     analyze_clip,
     detector_identity,
 )
@@ -36,6 +36,13 @@ from reporter.vlm_host_guard import HostOwnershipError, require_expected_host
 V26_CHECKPOINT_SHA256 = "a00e5a7a1e1f9197accb036339a38a7c821f03c8ab79611ebce89e5cde59b513"
 V26_DETECTOR_FREEZE_SHA256 = "8f8e02beb452ec2ddfdce344dff507294f56136c69224990c50552d22bb343a0"
 V26_DETECTOR_IDENTITY = "deccfc8315d3c00edb5bf59db3c573dca568e9d6d7a5da8d7dc93d2082bdb899"
+# v2.6.1 승인 identity — threshold 가 detector identity 해시에 들어가므로 기준별로 따로 승인한다.
+V261_IDENTITY_BY_THRESHOLD = {
+    0.30: "44dd382cba74355c98eff3c202acf1b1195d92870c50ac86f4fafa4c75aed92e",
+    0.15: "81688d0a5ae61299e569573bbc7429bbe362ef9f086cd1cf3e699f9c18c5de2c",  # 2026-09-23 gme-motion-v2 전환(owner)
+}
+# 알고리즘 버전 → 엔진 설정. 여기 없는 버전은 기동 거부.
+ENGINE_CONFIG_BY_ALGORITHM = {"gme-motion-v1": GMEConfig.v26, "gme-motion-v2": GMEConfig.v2_link}
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,7 +65,8 @@ def _run_payload(job, analysis, uploaded, producer: Producer, *, detector_proven
         "engine_schema_version": job.engine_schema_version,
         "algorithm_version": job.algorithm_version, "detector_identity": job.detector_identity,
         "detector_provenance": dict(detector_provenance),
-        "tracker_provenance": {"implementation": "opencv-sparse-lk-v0"},
+        "tracker_provenance": {"implementation": "opencv-sparse-lk-v0" if job.algorithm_version == "gme-motion-v1"
+                               else "anchor-link-v1"},  # v2: 1초 공백 유지·공백 채우기·IoU 흔들림 가드
         "engine_provenance": {"schema": job.engine_schema_version, "algorithm": job.algorithm_version},
         "producer_host": producer.host, "producer_run_id": producer.run_id,
         "producer_code_ref": producer.code_ref, "status": analysis.status,
@@ -160,19 +168,23 @@ def _validated_v26_engine_config() -> GMEConfig:
         "GME_DEVICE": "mps",
     }
     if config.GME_MODEL_VERSION == "v2.6.1-warm-start-s27":
+        threshold = config.GME_SCORE_THRESHOLD if config.GME_SCORE_THRESHOLD in V261_IDENTITY_BY_THRESHOLD else 0.30
         expected.update({
             "GME_MODEL_VERSION": "v2.6.1-warm-start-s27",
             "GME_CHECKPOINT_SHA256": "313e933b623561027af9368244c16e8960c74d9b66ec1b919c8d3b58c0ff1c96",
             "GME_DETECTOR_FREEZE_SHA256": "a0c9d8305ee263a4302f7a0c0fc04a04e75b47b00815d91c088f56df42438bef",
-            "GME_DETECTOR_IDENTITY": "44dd382cba74355c98eff3c202acf1b1195d92870c50ac86f4fafa4c75aed92e",
-            "GME_SCORE_THRESHOLD": 0.30,
+            "GME_DETECTOR_IDENTITY": V261_IDENTITY_BY_THRESHOLD[threshold],
+            "GME_SCORE_THRESHOLD": threshold,
         })
+    if config.GME_ALGORITHM_VERSION not in ENGINE_CONFIG_BY_ALGORITHM:
+        raise ValueError("approved YOLO contract mismatch: GME_ALGORITHM_VERSION")
+    expected["GME_ALGORITHM_VERSION"] = config.GME_ALGORITHM_VERSION
     for name, value in expected.items():
         if getattr(config, name) != value:
             raise ValueError(f"approved YOLO contract mismatch: {name}")
-    engine_config = GMEConfig.v26()
+    engine_config = ENGINE_CONFIG_BY_ALGORITHM[config.GME_ALGORITHM_VERSION]()
     if (
-        ALGORITHM_VERSION != config.GME_ALGORITHM_VERSION
+        algorithm_version_for(engine_config) != config.GME_ALGORITHM_VERSION
         or engine_config.analysis_fps != config.GME_ANALYSIS_FPS
         or engine_config.anchor_interval_sec != config.GME_ANCHOR_INTERVAL_SEC
         or engine_config.detection_window_frames != config.GME_TEMPORAL_WINDOW_FRAMES
@@ -181,6 +193,14 @@ def _validated_v26_engine_config() -> GMEConfig:
     ):
         raise ValueError("local Gate v2.6 engine contract mismatch")
     return engine_config
+
+
+def _job_contract_ok(job, detector_provenance: dict) -> bool:
+    return (
+        job.engine_schema_version == ENGINE_SCHEMA_VERSION
+        and job.algorithm_version == config.GME_ALGORITHM_VERSION
+        and job.detector_identity == detector_provenance.get("detector_identity")
+    )
 
 
 def process_jobs(
@@ -192,11 +212,7 @@ def process_jobs(
     stats = {"jobs": len(jobs), "succeeded": 0, "failed": 0, "terminal": 0, "stale": 0}
     for job in jobs:
         try:
-            if (
-                job.engine_schema_version != ENGINE_SCHEMA_VERSION
-                or job.algorithm_version != ALGORITHM_VERSION
-                or job.detector_identity != detector_provenance.get("detector_identity")
-            ):
+            if not _job_contract_ok(job, detector_provenance):
                 raise _JobFailure("invalid_metadata", retryable=False)
             key = clip_keys.get(job.clip_id)
             if not key:
@@ -307,7 +323,7 @@ def run(
         if detector_provenance.get("detector_identity") != config.GME_DETECTOR_IDENTITY:
             print("[gme] detector execution identity mismatch", file=sys.stderr)
             return 2
-        producer = Producer(host, now.strftime("%Y%m%dT%H%M%S"), "gme-worker/gme-motion-v1")
+        producer = Producer(host, now.strftime("%Y%m%dT%H%M%S"), f"gme-worker/{config.GME_ALGORITHM_VERSION}")
         stats = process_jobs(
             sb, jobs, clip_keys, worker_host=host, now=now, temp_root=None,
             download_fn=r2.download_clip,

@@ -83,6 +83,16 @@ PYTHON_EVIDENCE_MIN_FRAMES = int(os.environ.get("PYTHON_EVIDENCE_MIN_FRAMES", "6
 
 # --- Gecko Motion Engine production shadow ---
 # 기존 Python Evidence와 독립된 직접 교체 worker. 기본 비활성 + exact host guard로 fail-closed.
+def parse_gme_allowed_sources(raw: str) -> tuple[str, ...]:
+    """live와 historical worker가 같은 queue에서 source를 섞어 claim하지 않게 고정한다."""
+
+    parsed = tuple(raw.split(","))
+    allowed = {("smoke",), ("live",), ("smoke", "live"), ("historical",)}
+    if parsed not in allowed:
+        raise ValueError("GME_ALLOWED_SOURCES must be a canonical isolated source allowlist")
+    return parsed
+
+
 GME_ENABLED = os.environ.get("GME_ENABLED", "0") == "1"
 GME_EXPECTED_HOST = os.environ.get("GME_EXPECTED_HOST", "")
 GME_BATCH_LIMIT = min(max(int(os.environ.get("GME_BATCH_LIMIT", "4")), 1), 50)
@@ -97,6 +107,7 @@ GME_DETECTOR_FREEZE_SHA256 = os.environ.get("GME_DETECTOR_FREEZE_SHA256", "")
 GME_DETECTOR_IDENTITY = os.environ.get("GME_DETECTOR_IDENTITY", "")
 GME_ALGORITHM_VERSION = os.environ.get("GME_ALGORITHM_VERSION", "gme-motion-v1")
 GME_MODEL_VERSION = os.environ.get("GME_MODEL_VERSION", "v2.6-warm-start-s28")
+GME_ALLOWED_SOURCES = parse_gme_allowed_sources(os.environ.get("GME_ALLOWED_SOURCES", "smoke,live"))
 GME_RAW_CONFIDENCE = float(os.environ.get("GME_RAW_CONFIDENCE", "0.001"))
 GME_SCORE_THRESHOLD = float(os.environ.get("GME_SCORE_THRESHOLD", "0.15"))
 GME_IMAGE_SIZE = int(os.environ.get("GME_IMAGE_SIZE", "960"))

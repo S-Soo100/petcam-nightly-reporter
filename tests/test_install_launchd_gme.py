@@ -10,6 +10,9 @@ HOST = "petcam-macmini.local"
 V26_SHA = "a00e5a7a1e1f9197accb036339a38a7c821f03c8ab79611ebce89e5cde59b513"
 V26_FREEZE_SHA = "8f8e02beb452ec2ddfdce344dff507294f56136c69224990c50552d22bb343a0"
 V26_IDENTITY = "deccfc8315d3c00edb5bf59db3c573dca568e9d6d7a5da8d7dc93d2082bdb899"
+BETA_V2_SHA = "91a275ad1a047e7a0f70a8a9c1212da7d2b21532bb568a33b3401be9e338751d"
+BETA_V2_FREEZE_SHA = "74d2dc854198b8f871005d591dc18bd5273d7de857ebcea11b4d32f60343c75f"
+BETA_V2_IDENTITY = "8968c0546e4a86486eb56fb1ab89939da9aedabe3306131ffe8f052669ee0964"
 
 
 def _v26_env():
@@ -34,6 +37,8 @@ def _v26_env():
         "GME_TEMPORAL_WINDOW_FRAMES": "5",
         "GME_TEMPORAL_MIN_POSITIVE_FRAMES": "3",
         "GME_DEVICE": "mps",
+        "GME_ALLOWED_SOURCES": "smoke,live",
+        "GME_SERVICE_LABEL": "com.petcam.gme-worker",
     }
 
 
@@ -92,6 +97,7 @@ def test_installer_is_fail_closed_and_uses_60_second_one_shot(tmp_path):
     assert "<key>GME_TEMPORAL_WINDOW_FRAMES</key><string>5</string>" in text
     assert "<key>GME_TEMPORAL_MIN_POSITIVE_FRAMES</key><string>3</string>" in text
     assert "<key>GME_DEVICE</key><string>mps</string>" in text
+    assert "<key>GME_ALLOWED_SOURCES</key><string>smoke,live</string>" in text
     assert "WorkingDirectory" in text
     assert "SUPABASE" not in text and "R2_SECRET" not in text
 
@@ -175,3 +181,31 @@ def test_installer_defaults_algorithm_to_v1_and_rejects_unknown(tmp_path):
 def test_installer_rejects_015_threshold_with_030_identity(tmp_path):
     result, home = _run(tmp_path / "mixed", _v261_env(GME_SCORE_THRESHOLD="0.15"))
     assert result.returncode != 0 and not list(home.rglob("*.plist"))
+
+
+def test_installer_accepts_beta_v2_and_historical_service_contract(tmp_path):
+    import plistlib
+    env = {
+        **_v26_env(),
+        "GME_SERVICE_LABEL": "com.petcam.gme-historical-worker",
+        "GME_ALLOWED_SOURCES": "historical",
+        "GME_MODEL_VERSION": "v2.6.1-beta-v2-s27",
+        "GME_CHECKPOINT_SHA256": BETA_V2_SHA,
+        "GME_DETECTOR_FREEZE_SHA256": BETA_V2_FREEZE_SHA,
+        "GME_DETECTOR_IDENTITY": BETA_V2_IDENTITY,
+        "GME_SCORE_THRESHOLD": "0.80",
+        "GME_ALGORITHM_VERSION": "gme-motion-v2",
+    }
+    result, home = _run(tmp_path / "historical", env)
+    assert result.returncode == 0, result.stderr
+    plist = plistlib.loads(next(home.rglob("*.plist")).read_bytes())
+    assert plist["Label"] == "com.petcam.gme-historical-worker"
+    assert plist["EnvironmentVariables"]["GME_ALLOWED_SOURCES"] == "historical"
+
+    for key, value in {
+        "GME_SERVICE_LABEL": "com.petcam.other",
+        "GME_ALLOWED_SOURCES": "smoke,live,historical",
+    }.items():
+        result, bad_home = _run(tmp_path / key, {**env, key: value})
+        assert result.returncode != 0
+        assert not list(bad_home.rglob("*.plist"))

@@ -58,18 +58,18 @@ def _row(**changes):
 
 
 def test_claim_uses_identity_isolated_rpc_and_frozen_job():
-    sb = SB({"fn_claim_gme_jobs_for_contract": [_row()]})
+    sb = SB({"fn_claim_gme_jobs_for_contract_v2": [_row()]})
     jobs = claim_jobs(
-        sb, limit=3, worker_host="host", now=NOW, include_historical=False,
+        sb, limit=3, worker_host="host", now=NOW, allowed_sources=("smoke", "live"),
         detector_identity=V26_IDENTITY, algorithm_version=ALGORITHM_VERSION,
         engine_schema_version="gme-shadow-v1",
     )
     assert jobs == [GMEJob.from_row(_row())]
-    assert sb.calls == [("fn_claim_gme_jobs_for_contract", {
+    assert sb.calls == [("fn_claim_gme_jobs_for_contract_v2", {
         "p_limit": 3,
         "p_worker_host": "host",
         "p_now": NOW.isoformat(),
-        "p_include_historical": False,
+        "p_allowed_sources": ["smoke", "live"],
         "p_detector_identity": V26_IDENTITY,
         "p_algorithm_version": ALGORITHM_VERSION,
         "p_engine_schema_version": "gme-shadow-v1",
@@ -82,11 +82,31 @@ def test_claim_rejects_invalid_identity_before_rpc():
     sb = SB({})
     with pytest.raises(ValueError, match="lowercase SHA-256"):
         claim_jobs(
-            sb, limit=1, worker_host="host", now=NOW, include_historical=True,
+            sb, limit=1, worker_host="host", now=NOW, allowed_sources=("historical",),
             detector_identity="v2.6", algorithm_version=ALGORITHM_VERSION,
             engine_schema_version="gme-shadow-v1",
         )
     assert sb.calls == []
+
+
+def test_claim_rejects_noncanonical_or_cross_source_results():
+    for sources in ((), ("live", "smoke"), ("live", "live"), ("other",)):
+        sb = SB({})
+        with pytest.raises(ValueError, match="canonical GME sources"):
+            claim_jobs(
+                sb, limit=1, worker_host="host", now=NOW, allowed_sources=sources,
+                detector_identity=V26_IDENTITY, algorithm_version=ALGORITHM_VERSION,
+                engine_schema_version="gme-shadow-v1",
+            )
+        assert sb.calls == []
+
+    sb = SB({"fn_claim_gme_jobs_for_contract_v2": [_row(source="historical")]})
+    with pytest.raises(GMEStoreError, match="outside worker allowlist"):
+        claim_jobs(
+            sb, limit=1, worker_host="host", now=NOW, allowed_sources=("smoke", "live"),
+            detector_identity=V26_IDENTITY, algorithm_version=ALGORITHM_VERSION,
+            engine_schema_version="gme-shadow-v1",
+        )
 
 
 def test_operational_stats_are_isolated_to_the_active_contract():
@@ -130,10 +150,10 @@ def test_fail_rejects_non_allowlisted_code_before_rpc():
 
 
 def test_rpc_errors_are_redacted():
-    sb = SB({"fn_claim_gme_jobs_for_contract": RuntimeError("https://secret.invalid?key=secret")})
+    sb = SB({"fn_claim_gme_jobs_for_contract_v2": RuntimeError("https://secret.invalid?key=secret")})
     with pytest.raises(GMEStoreError) as error:
         claim_jobs(
-            sb, limit=1, worker_host="h", now=NOW, include_historical=True,
+            sb, limit=1, worker_host="h", now=NOW, allowed_sources=("historical",),
             detector_identity=V26_IDENTITY, algorithm_version=ALGORITHM_VERSION,
             engine_schema_version="gme-shadow-v1",
         )

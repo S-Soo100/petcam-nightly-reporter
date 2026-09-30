@@ -64,25 +64,31 @@ def claim_jobs(
     limit: int,
     worker_host: str,
     now: datetime,
-    include_historical: bool,
+    allowed_sources: tuple[str, ...],
     detector_identity: str,
     algorithm_version: str,
     engine_schema_version: str,
 ) -> list[GMEJob]:
+    canonical_sources = {("smoke",), ("live",), ("smoke", "live"), ("historical",)}
+    if allowed_sources not in canonical_sources:
+        raise ValueError("allowed_sources must be canonical GME sources")
     if re.fullmatch(r"[0-9a-f]{64}", detector_identity) is None:
         raise ValueError("detector identity must be a lowercase SHA-256")
     if re.fullmatch(r"gme-motion-v[0-9]+", algorithm_version) is None:
         raise ValueError("invalid GME algorithm version")
     if engine_schema_version != "gme-shadow-v1":
         raise ValueError("invalid GME engine schema version")
-    rows = _rpc(sb, "fn_claim_gme_jobs_for_contract", {
+    rows = _rpc(sb, "fn_claim_gme_jobs_for_contract_v2", {
         "p_limit": limit, "p_worker_host": worker_host, "p_now": now.isoformat(),
-        "p_include_historical": include_historical,
+        "p_allowed_sources": list(allowed_sources),
         "p_detector_identity": detector_identity,
         "p_algorithm_version": algorithm_version,
         "p_engine_schema_version": engine_schema_version,
     })
-    return [GMEJob.from_row(row) for row in (rows or [])]
+    jobs = [GMEJob.from_row(row) for row in (rows or [])]
+    if any(job.source not in allowed_sources for job in jobs):
+        raise GMEStoreError("claim returned source outside worker allowlist")
+    return jobs
 
 
 def complete_job(sb, *, job_id: str, run_id: str, worker_host: str) -> None:

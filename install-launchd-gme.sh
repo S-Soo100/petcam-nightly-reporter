@@ -2,7 +2,7 @@
 # GME production-shadow 60초 one-shot LaunchAgent installer. credential은 plist에 넣지 않고 repo .env에서 읽는다.
 set -euo pipefail
 
-LABEL="com.petcam.gme-worker"
+LABEL="${GME_SERVICE_LABEL:-com.petcam.gme-worker}"
 INTERVAL_SEC="${GME_INTERVAL_SEC:-60}"
 ENABLE="${GME_ENABLED:-0}"
 EXPECTED_HOST="${GME_EXPECTED_HOST:-}"
@@ -25,6 +25,7 @@ TEMPORAL_WINDOW_FRAMES="${GME_TEMPORAL_WINDOW_FRAMES:-}"
 TEMPORAL_MIN_POSITIVE_FRAMES="${GME_TEMPORAL_MIN_POSITIVE_FRAMES:-}"
 DEVICE="${GME_DEVICE:-}"
 ALGORITHM_VERSION="${GME_ALGORITHM_VERSION:-gme-motion-v1}"
+ALLOWED_SOURCES="${GME_ALLOWED_SOURCES:-}"
 ACTUAL_HOST="$(hostname)"
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -55,6 +56,11 @@ case "$MODEL_VERSION" in
       APPROVED_IDENTITY="44dd382cba74355c98eff3c202acf1b1195d92870c50ac86f4fafa4c75aed92e"
       APPROVED_THRESHOLD="0.30"
     fi ;;
+  v2.6.1-beta-v2-s27)
+    APPROVED_SHA="91a275ad1a047e7a0f70a8a9c1212da7d2b21532bb568a33b3401be9e338751d"
+    APPROVED_FREEZE="74d2dc854198b8f871005d591dc18bd5273d7de857ebcea11b4d32f60343c75f"
+    APPROVED_IDENTITY="8968c0546e4a86486eb56fb1ab89939da9aedabe3306131ffe8f052669ee0964"
+    APPROVED_THRESHOLD="0.80" ;;
   *) echo "unapproved GME model version" >&2; exit 1 ;;
 esac
 [ "$CHECKPOINT_SHA256" = "$APPROVED_SHA" ] && [ "$DETECTOR_FREEZE_SHA256" = "$APPROVED_FREEZE" ] && [ "$DETECTOR_IDENTITY" = "$APPROVED_IDENTITY" ] && [ "$SCORE_THRESHOLD" = "$APPROVED_THRESHOLD" ] || { echo "GME model contract mismatch" >&2; exit 1; }
@@ -69,6 +75,14 @@ esac
 [ "$TEMPORAL_MIN_POSITIVE_FRAMES" = "3" ] || { echo "GME_TEMPORAL_MIN_POSITIVE_FRAMES must be 3" >&2; exit 1; }
 [ "$DEVICE" = "mps" ] || { echo "GME_DEVICE must be mps" >&2; exit 1; }
 case "$ALGORITHM_VERSION" in gme-motion-v1|gme-motion-v2) ;; *) echo "unapproved GME_ALGORITHM_VERSION" >&2; exit 1 ;; esac
+[ "$MODEL_VERSION" != "v2.6.1-beta-v2-s27" ] || [ "$ALGORITHM_VERSION" = "gme-motion-v2" ] || {
+  echo "beta v2 requires gme-motion-v2" >&2
+  exit 1
+}
+case "$LABEL:$ALLOWED_SOURCES" in
+  com.petcam.gme-worker:smoke,live|com.petcam.gme-historical-worker:historical) ;;
+  *) echo "GME service label/source contract mismatch" >&2; exit 1 ;;
+esac
 
 UV_BIN="$(command -v uv || true)"
 [ -n "$UV_BIN" ] || { echo "uv missing" >&2; exit 1; }
@@ -87,8 +101,8 @@ cat > "$PLIST" <<PLIST
   <key>WorkingDirectory</key><string>$REPO_DIR</string>
   <key>RunAtLoad</key><true/>
   <key>StartInterval</key><integer>60</integer>
-  <key>StandardOutPath</key><string>/tmp/gme-worker.log</string>
-  <key>StandardErrorPath</key><string>/tmp/gme-worker.log</string>
+  <key>StandardOutPath</key><string>/tmp/$LABEL.log</string>
+  <key>StandardErrorPath</key><string>/tmp/$LABEL.log</string>
   <key>EnvironmentVariables</key><dict>
     <key>PATH</key><string>$(dirname "$UV_BIN"):/usr/bin:/bin</string>
     <key>GME_ENABLED</key><string>1</string>
@@ -112,6 +126,7 @@ cat > "$PLIST" <<PLIST
     <key>GME_TEMPORAL_MIN_POSITIVE_FRAMES</key><string>$TEMPORAL_MIN_POSITIVE_FRAMES</string>
     <key>GME_DEVICE</key><string>$DEVICE</string>
     <key>GME_ALGORITHM_VERSION</key><string>$ALGORITHM_VERSION</string>
+    <key>GME_ALLOWED_SOURCES</key><string>$ALLOWED_SOURCES</string>
   </dict>
 </dict></plist>
 PLIST

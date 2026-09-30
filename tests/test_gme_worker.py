@@ -14,6 +14,9 @@ NOW = datetime(2026, 8, 3, tzinfo=timezone.utc)
 V26_SHA = "a00e5a7a1e1f9197accb036339a38a7c821f03c8ab79611ebce89e5cde59b513"
 V26_FREEZE_SHA = "8f8e02beb452ec2ddfdce344dff507294f56136c69224990c50552d22bb343a0"
 V26_IDENTITY = "deccfc8315d3c00edb5bf59db3c573dca568e9d6d7a5da8d7dc93d2082bdb899"
+BETA_V2_SHA = "91a275ad1a047e7a0f70a8a9c1212da7d2b21532bb568a33b3401be9e338751d"
+BETA_V2_FREEZE_SHA = "74d2dc854198b8f871005d591dc18bd5273d7de857ebcea11b4d32f60343c75f"
+BETA_V2_IDENTITY = "8968c0546e4a86486eb56fb1ab89939da9aedabe3306131ffe8f052669ee0964"
 ALGORITHM_VERSION = "gme-motion-v1"
 V26_PROVENANCE = {
     "model_name": "yolo26n",
@@ -83,6 +86,7 @@ def test_run_passes_configured_identity_to_claim_rpc(monkeypatch):
     monkeypatch.setattr(worker.config, "GME_EXPECTED_HOST", "expected")
     monkeypatch.setattr(worker.config, "GME_DETECTOR_IDENTITY", V26_IDENTITY)
     monkeypatch.setattr(worker.config, "GME_ALGORITHM_VERSION", ALGORITHM_VERSION)
+    monkeypatch.setattr(worker.config, "GME_ALLOWED_SOURCES", ("smoke", "live"))
     monkeypatch.setattr(worker, "_validated_v26_engine_config", lambda: object())
     def fake_operational_stats(_sb, **kwargs):
         captured["stats_contract"] = kwargs
@@ -104,13 +108,34 @@ def test_run_passes_configured_identity_to_claim_rpc(monkeypatch):
     assert rc == 0
     assert captured["detector_identity"] == V26_IDENTITY
     assert captured["algorithm_version"] == ALGORITHM_VERSION
-    assert captured["include_historical"] is False
+    assert captured["allowed_sources"] == ("smoke", "live")
     assert captured["stats_contract"] == {
         "now": NOW,
         "detector_identity": V26_IDENTITY,
         "algorithm_version": ALGORITHM_VERSION,
         "engine_schema_version": "gme-shadow-v1",
     }
+
+
+def test_historical_only_worker_pauses_without_claim_when_live_lag_is_high(monkeypatch):
+    calls = []
+    monkeypatch.setattr(worker.config, "GME_ENABLED", True)
+    monkeypatch.setattr(worker.config, "GME_EXPECTED_HOST", "expected")
+    monkeypatch.setattr(worker.config, "GME_DETECTOR_IDENTITY", V26_IDENTITY)
+    monkeypatch.setattr(worker.config, "GME_ALGORITHM_VERSION", ALGORITHM_VERSION)
+    monkeypatch.setattr(worker.config, "GME_ALLOWED_SOURCES", ("historical",))
+    monkeypatch.setattr(worker, "_validated_v26_engine_config", lambda: object())
+    monkeypatch.setattr(worker, "operational_stats", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(worker, "allow_historical_claim", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(worker, "claim_jobs", lambda *_args, **_kwargs: calls.append("claim"))
+
+    rc = worker.run(
+        sb_factory=lambda: object(), hostname_fn=lambda: "expected", now=NOW,
+        acquire_lock_fn=lambda: object(), release_lock_fn=lambda _lock: None,
+    )
+
+    assert rc == 0
+    assert calls == []
 
 
 def test_process_jobs_downloads_analyzes_uploads_inserts_and_completes_once(tmp_path):
@@ -321,6 +346,37 @@ def test_v2_contract_uses_link_engine_and_015_identity(monkeypatch):
         monkeypatch.setattr(worker.config, key, value)
     cfg = worker._validated_v26_engine_config()
     assert cfg.track_max_missed_sec == 1.0 and cfg.fill_track_gaps is True
+
+
+def test_beta_v2_contract_accepts_only_frozen_model_tuple(monkeypatch):
+    values = _v261_values(
+        GME_ALGORITHM_VERSION="gme-motion-v2",
+        GME_MODEL_VERSION="v2.6.1-beta-v2-s27",
+        GME_CHECKPOINT_SHA256=BETA_V2_SHA,
+        GME_DETECTOR_FREEZE_SHA256=BETA_V2_FREEZE_SHA,
+        GME_DETECTOR_IDENTITY=BETA_V2_IDENTITY,
+        GME_SCORE_THRESHOLD=.80,
+    )
+    for key, value in values.items():
+        monkeypatch.setattr(worker.config, key, value)
+    assert worker._validated_v26_engine_config().analysis_fps == 10.0
+    monkeypatch.setattr(worker.config, "GME_SCORE_THRESHOLD", .15)
+    import pytest
+    with pytest.raises(ValueError, match="GME_SCORE_THRESHOLD"):
+        worker._validated_v26_engine_config()
+    monkeypatch.setattr(worker.config, "GME_SCORE_THRESHOLD", .80)
+    monkeypatch.setattr(worker.config, "GME_ALGORITHM_VERSION", "gme-motion-v1")
+    with pytest.raises(ValueError, match="GME_ALGORITHM_VERSION"):
+        worker._validated_v26_engine_config()
+
+
+def test_config_accepts_canonical_source_allowlists_only():
+    assert worker.config.parse_gme_allowed_sources("smoke,live") == ("smoke", "live")
+    assert worker.config.parse_gme_allowed_sources("historical") == ("historical",)
+    import pytest
+    for raw in ("", "live,smoke", "live,live", "live, historical", "other"):
+        with pytest.raises(ValueError, match="GME_ALLOWED_SOURCES"):
+            worker.config.parse_gme_allowed_sources(raw)
 
 
 def test_v2_algorithm_with_030_threshold_is_also_allowed(monkeypatch):

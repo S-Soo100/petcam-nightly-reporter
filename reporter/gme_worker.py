@@ -41,6 +41,10 @@ V261_IDENTITY_BY_THRESHOLD = {
     0.30: "44dd382cba74355c98eff3c202acf1b1195d92870c50ac86f4fafa4c75aed92e",
     0.15: "81688d0a5ae61299e569573bbc7429bbe362ef9f086cd1cf3e699f9c18c5de2c",  # 2026-09-23 gme-motion-v2 전환(owner)
 }
+BETA_V2_MODEL_VERSION = "v2.6.1-beta-v2-s27"
+BETA_V2_CHECKPOINT_SHA256 = "91a275ad1a047e7a0f70a8a9c1212da7d2b21532bb568a33b3401be9e338751d"
+BETA_V2_DETECTOR_FREEZE_SHA256 = "74d2dc854198b8f871005d591dc18bd5273d7de857ebcea11b4d32f60343c75f"
+BETA_V2_DETECTOR_IDENTITY = "8968c0546e4a86486eb56fb1ab89939da9aedabe3306131ffe8f052669ee0964"
 # 알고리즘 버전 → 엔진 설정. 여기 없는 버전은 기동 거부.
 ENGINE_CONFIG_BY_ALGORITHM = {"gme-motion-v1": GMEConfig.v26, "gme-motion-v2": GMEConfig.v2_link}
 
@@ -176,6 +180,16 @@ def _validated_v26_engine_config() -> GMEConfig:
             "GME_DETECTOR_IDENTITY": V261_IDENTITY_BY_THRESHOLD[threshold],
             "GME_SCORE_THRESHOLD": threshold,
         })
+    elif config.GME_MODEL_VERSION == BETA_V2_MODEL_VERSION:
+        if config.GME_ALGORITHM_VERSION != "gme-motion-v2":
+            raise ValueError("approved YOLO contract mismatch: GME_ALGORITHM_VERSION")
+        expected.update({
+            "GME_MODEL_VERSION": BETA_V2_MODEL_VERSION,
+            "GME_CHECKPOINT_SHA256": BETA_V2_CHECKPOINT_SHA256,
+            "GME_DETECTOR_FREEZE_SHA256": BETA_V2_DETECTOR_FREEZE_SHA256,
+            "GME_DETECTOR_IDENTITY": BETA_V2_DETECTOR_IDENTITY,
+            "GME_SCORE_THRESHOLD": 0.80,
+        })
     if config.GME_ALGORITHM_VERSION not in ENGINE_CONFIG_BY_ALGORITHM:
         raise ValueError("approved YOLO contract mismatch: GME_ALGORITHM_VERSION")
     expected["GME_ALGORITHM_VERSION"] = config.GME_ALGORITHM_VERSION
@@ -310,8 +324,15 @@ def run(
             engine_schema_version=ENGINE_SCHEMA_VERSION,
         )
         include_historical = allow_historical_claim(queue_stats, max_live_lag_sec=config.GME_MAX_LIVE_LAG_SEC)
+        allowed_sources = tuple(
+            source for source in config.GME_ALLOWED_SOURCES
+            if source != "historical" or include_historical
+        )
+        if not allowed_sources:
+            print("[gme] historical claim paused by live lag — skip")
+            return 0
         jobs = claim_jobs(sb, limit=config.GME_BATCH_LIMIT, worker_host=host, now=now,
-                          include_historical=include_historical,
+                          allowed_sources=allowed_sources,
                           detector_identity=config.GME_DETECTOR_IDENTITY,
                           algorithm_version=config.GME_ALGORITHM_VERSION,
                           engine_schema_version=ENGINE_SCHEMA_VERSION)

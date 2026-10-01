@@ -110,7 +110,7 @@ def _existing_identity_clip_ids(sb, clip_ids: list[str], detector_identity: str)
         rows = (
             sb.table(table).select("clip_id").in_("clip_id", clip_ids)
             .eq("detector_identity", detector_identity)
-            .eq("algorithm_version", ALGORITHM_VERSION).execute().data or []
+            .eq("algorithm_version", config.GME_ALGORITHM_VERSION).execute().data or []
         )
         existing.update(row["clip_id"] for row in rows if row.get("clip_id"))
     return existing
@@ -187,7 +187,8 @@ def enqueue(
         return 0
     data = sb.rpc("fn_enqueue_gme_jobs", {
         "p_clip_ids": unique, "p_source": source, "p_priority": priority,
-        "p_engine_schema_version": ENGINE_SCHEMA_VERSION, "p_algorithm_version": ALGORITHM_VERSION,
+        "p_engine_schema_version": ENGINE_SCHEMA_VERSION,
+        "p_algorithm_version": config.GME_ALGORITHM_VERSION,
         "p_detector_identity": detector_identity,
     }).execute().data
     return int(data or 0)

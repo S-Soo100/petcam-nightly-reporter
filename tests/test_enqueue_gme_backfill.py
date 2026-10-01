@@ -277,6 +277,17 @@ def test_backfill_enqueues_each_keyset_page_as_bounded_rpc():
     assert {args["p_algorithm_version"] for _, args in client.calls} == {ALGORITHM_VERSION}
 
 
+def test_enqueue_uses_active_algorithm_version(monkeypatch):
+    client = _RpcClient()
+    monkeypatch.setattr(backfill.config, "GME_ALGORITHM_VERSION", "gme-motion-v2")
+
+    assert enqueue(
+        client, ["clip-1"], source="smoke", priority=90, apply=True,
+        detector_identity=V26_IDENTITY,
+    ) == 1
+    assert client.calls[0][1]["p_algorithm_version"] == "gme-motion-v2"
+
+
 def test_enqueue_rejects_non_sha_detector_identity_before_rpc():
     client = _RpcClient()
     with pytest.raises(ValueError, match="detector identity"):

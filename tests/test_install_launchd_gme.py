@@ -13,6 +13,9 @@ V26_IDENTITY = "deccfc8315d3c00edb5bf59db3c573dca568e9d6d7a5da8d7dc93d2082bdb899
 BETA_V2_SHA = "91a275ad1a047e7a0f70a8a9c1212da7d2b21532bb568a33b3401be9e338751d"
 BETA_V2_FREEZE_SHA = "74d2dc854198b8f871005d591dc18bd5273d7de857ebcea11b4d32f60343c75f"
 BETA_V2_IDENTITY = "8968c0546e4a86486eb56fb1ab89939da9aedabe3306131ffe8f052669ee0964"
+BETA_V3_SHA = "f1046788e179f40e0e8a72af650848af3fa7b934c08e54e28a77930dccc0fb5e"
+BETA_V3_FREEZE_SHA = "430c7f0485acd406fb8415603e8a135ab67213bb0a101cbb6bab0127fd5bd57c"
+BETA_V3_IDENTITY = "83a36f6378aebc6e911deebc003d5307625703b33111babc2dd6d57dc502ff9e"
 
 
 def _v26_env():
@@ -208,4 +211,29 @@ def test_installer_accepts_beta_v2_and_historical_service_contract(tmp_path):
     }.items():
         result, bad_home = _run(tmp_path / key, {**env, key: value})
         assert result.returncode != 0
+        assert not list(bad_home.rglob("*.plist"))
+
+
+def test_installer_accepts_beta_v3_and_rejects_mixed_tuple(tmp_path):
+    import plistlib
+    env = {
+        **_v26_env(),
+        "GME_SERVICE_LABEL": "com.petcam.gme-historical-worker",
+        "GME_ALLOWED_SOURCES": "historical",
+        "GME_MODEL_VERSION": "v2.6.1-beta-v3-s27",
+        "GME_CHECKPOINT_SHA256": BETA_V3_SHA,
+        "GME_DETECTOR_FREEZE_SHA256": BETA_V3_FREEZE_SHA,
+        "GME_DETECTOR_IDENTITY": BETA_V3_IDENTITY,
+        "GME_SCORE_THRESHOLD": "0.70",
+        "GME_ALGORITHM_VERSION": "gme-motion-v2",
+    }
+    result, home = _run(tmp_path / "v3", env)
+    assert result.returncode == 0, result.stderr
+    plist = plistlib.loads(next(home.rglob("*.plist")).read_bytes())
+    assert plist["EnvironmentVariables"]["GME_DETECTOR_IDENTITY"] == BETA_V3_IDENTITY
+    assert plist["EnvironmentVariables"]["GME_SCORE_THRESHOLD"] == "0.70"
+    for key, value in {"GME_SCORE_THRESHOLD": "0.80", "GME_DETECTOR_IDENTITY": BETA_V2_IDENTITY,
+                       "GME_CHECKPOINT_SHA256": BETA_V2_SHA, "GME_ALGORITHM_VERSION": "gme-motion-v1"}.items():
+        result, bad_home = _run(tmp_path / f"bad-{key}", {**env, key: value})
+        assert result.returncode != 0, key
         assert not list(bad_home.rglob("*.plist"))

@@ -45,6 +45,12 @@ BETA_V2_MODEL_VERSION = "v2.6.1-beta-v2-s27"
 BETA_V2_CHECKPOINT_SHA256 = "91a275ad1a047e7a0f70a8a9c1212da7d2b21532bb568a33b3401be9e338751d"
 BETA_V2_DETECTOR_FREEZE_SHA256 = "74d2dc854198b8f871005d591dc18bd5273d7de857ebcea11b4d32f60343c75f"
 BETA_V2_DETECTOR_IDENTITY = "8968c0546e4a86486eb56fb1ab89939da9aedabe3306131ffe8f052669ee0964"
+# beta v3(2026-10-19 owner 채택): beta v2 + 움직이는 순간·미검출 GT 1,111 warm-start. 컷 0.70(재판정 v3b 선택).
+# freeze = selection-v3b.json, identity = 운영 런타임(gate 9968d29)에서 M4·home-mac 양쪽 계산값 일치.
+BETA_V3_MODEL_VERSION = "v2.6.1-beta-v3-s27"
+BETA_V3_CHECKPOINT_SHA256 = "f1046788e179f40e0e8a72af650848af3fa7b934c08e54e28a77930dccc0fb5e"
+BETA_V3_DETECTOR_FREEZE_SHA256 = "430c7f0485acd406fb8415603e8a135ab67213bb0a101cbb6bab0127fd5bd57c"
+BETA_V3_DETECTOR_IDENTITY = "83a36f6378aebc6e911deebc003d5307625703b33111babc2dd6d57dc502ff9e"
 # 알고리즘 버전 → 엔진 설정. 여기 없는 버전은 기동 거부.
 ENGINE_CONFIG_BY_ALGORITHM = {"gme-motion-v1": GMEConfig.v26, "gme-motion-v2": GMEConfig.v2_link}
 
@@ -189,6 +195,16 @@ def _validated_v26_engine_config() -> GMEConfig:
             "GME_DETECTOR_FREEZE_SHA256": BETA_V2_DETECTOR_FREEZE_SHA256,
             "GME_DETECTOR_IDENTITY": BETA_V2_DETECTOR_IDENTITY,
             "GME_SCORE_THRESHOLD": 0.80,
+        })
+    elif config.GME_MODEL_VERSION == BETA_V3_MODEL_VERSION:
+        if config.GME_ALGORITHM_VERSION != "gme-motion-v2":
+            raise ValueError("approved YOLO contract mismatch: GME_ALGORITHM_VERSION")
+        expected.update({
+            "GME_MODEL_VERSION": BETA_V3_MODEL_VERSION,
+            "GME_CHECKPOINT_SHA256": BETA_V3_CHECKPOINT_SHA256,
+            "GME_DETECTOR_FREEZE_SHA256": BETA_V3_DETECTOR_FREEZE_SHA256,
+            "GME_DETECTOR_IDENTITY": BETA_V3_DETECTOR_IDENTITY,
+            "GME_SCORE_THRESHOLD": 0.70,
         })
     if config.GME_ALGORITHM_VERSION not in ENGINE_CONFIG_BY_ALGORITHM:
         raise ValueError("approved YOLO contract mismatch: GME_ALGORITHM_VERSION")

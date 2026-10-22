@@ -51,6 +51,13 @@ BETA_V3_MODEL_VERSION = "v2.6.1-beta-v3-s27"
 BETA_V3_CHECKPOINT_SHA256 = "f1046788e179f40e0e8a72af650848af3fa7b934c08e54e28a77930dccc0fb5e"
 BETA_V3_DETECTOR_FREEZE_SHA256 = "430c7f0485acd406fb8415603e8a135ab67213bb0a101cbb6bab0127fd5bd57c"
 BETA_V3_DETECTOR_IDENTITY = "83a36f6378aebc6e911deebc003d5307625703b33111babc2dd6d57dc502ff9e"
+# beta v4(2026-10-23 owner 운영 채택, 시험지 판정 hold — G2 소품 오탐 3장): beta v3 + 새 카메라 놓친 프레임 375×3 warm-start.
+# 컷 0.70 은 시험지 고정값. freeze = petcam-lab experiments/gme-detector-eval-suite-v1/freeze-v4.json,
+# identity = 운영 런타임(gate 9968d29)에서 M1·M4·맥북 계산값 일치.
+BETA_V4_MODEL_VERSION = "v2.6.1-beta-v4-s27"
+BETA_V4_CHECKPOINT_SHA256 = "42b33c349cefcdfd241138630d4b617c50d70a43571cde7dd497cfd97d5fb3ad"
+BETA_V4_DETECTOR_FREEZE_SHA256 = "9836364febeeef3b468427dfe1411b32bdefb4181052a91e5e2d9c750e17f5c7"
+BETA_V4_DETECTOR_IDENTITY = "66d13f99571feb8d850436b447cd7e78256076def145c6adaa4ec7c969e5e897"
 # 알고리즘 버전 → 엔진 설정. 여기 없는 버전은 기동 거부.
 ENGINE_CONFIG_BY_ALGORITHM = {"gme-motion-v1": GMEConfig.v26, "gme-motion-v2": GMEConfig.v2_link}
 
@@ -204,6 +211,16 @@ def _validated_v26_engine_config() -> GMEConfig:
             "GME_CHECKPOINT_SHA256": BETA_V3_CHECKPOINT_SHA256,
             "GME_DETECTOR_FREEZE_SHA256": BETA_V3_DETECTOR_FREEZE_SHA256,
             "GME_DETECTOR_IDENTITY": BETA_V3_DETECTOR_IDENTITY,
+            "GME_SCORE_THRESHOLD": 0.70,
+        })
+    elif config.GME_MODEL_VERSION == BETA_V4_MODEL_VERSION:
+        if config.GME_ALGORITHM_VERSION != "gme-motion-v2":
+            raise ValueError("approved YOLO contract mismatch: GME_ALGORITHM_VERSION")
+        expected.update({
+            "GME_MODEL_VERSION": BETA_V4_MODEL_VERSION,
+            "GME_CHECKPOINT_SHA256": BETA_V4_CHECKPOINT_SHA256,
+            "GME_DETECTOR_FREEZE_SHA256": BETA_V4_DETECTOR_FREEZE_SHA256,
+            "GME_DETECTOR_IDENTITY": BETA_V4_DETECTOR_IDENTITY,
             "GME_SCORE_THRESHOLD": 0.70,
         })
     if config.GME_ALGORITHM_VERSION not in ENGINE_CONFIG_BY_ALGORITHM:

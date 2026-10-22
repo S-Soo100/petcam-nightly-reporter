@@ -16,6 +16,9 @@ BETA_V2_IDENTITY = "8968c0546e4a86486eb56fb1ab89939da9aedabe3306131ffe8f052669ee
 BETA_V3_SHA = "f1046788e179f40e0e8a72af650848af3fa7b934c08e54e28a77930dccc0fb5e"
 BETA_V3_FREEZE_SHA = "430c7f0485acd406fb8415603e8a135ab67213bb0a101cbb6bab0127fd5bd57c"
 BETA_V3_IDENTITY = "83a36f6378aebc6e911deebc003d5307625703b33111babc2dd6d57dc502ff9e"
+BETA_V4_SHA = "42b33c349cefcdfd241138630d4b617c50d70a43571cde7dd497cfd97d5fb3ad"
+BETA_V4_FREEZE_SHA = "9836364febeeef3b468427dfe1411b32bdefb4181052a91e5e2d9c750e17f5c7"
+BETA_V4_IDENTITY = "66d13f99571feb8d850436b447cd7e78256076def145c6adaa4ec7c969e5e897"
 
 
 def _v26_env():
@@ -234,6 +237,32 @@ def test_installer_accepts_beta_v3_and_rejects_mixed_tuple(tmp_path):
     assert plist["EnvironmentVariables"]["GME_SCORE_THRESHOLD"] == "0.70"
     for key, value in {"GME_SCORE_THRESHOLD": "0.80", "GME_DETECTOR_IDENTITY": BETA_V2_IDENTITY,
                        "GME_CHECKPOINT_SHA256": BETA_V2_SHA, "GME_ALGORITHM_VERSION": "gme-motion-v1"}.items():
+        result, bad_home = _run(tmp_path / f"bad-{key}", {**env, key: value})
+        assert result.returncode != 0, key
+        assert not list(bad_home.rglob("*.plist"))
+
+
+def test_installer_accepts_beta_v4_live_and_rejects_mixed_tuple(tmp_path):
+    import plistlib
+    env = {
+        **_v26_env(),
+        "GME_SERVICE_LABEL": "com.petcam.gme-worker",
+        "GME_ALLOWED_SOURCES": "smoke,live",
+        "GME_MODEL_VERSION": "v2.6.1-beta-v4-s27",
+        "GME_CHECKPOINT_SHA256": BETA_V4_SHA,
+        "GME_DETECTOR_FREEZE_SHA256": BETA_V4_FREEZE_SHA,
+        "GME_DETECTOR_IDENTITY": BETA_V4_IDENTITY,
+        "GME_SCORE_THRESHOLD": "0.70",
+        "GME_ALGORITHM_VERSION": "gme-motion-v2",
+    }
+    result, home = _run(tmp_path / "v4", env)
+    assert result.returncode == 0, result.stderr
+    plist = plistlib.loads(next(home.rglob("*.plist")).read_bytes())
+    assert plist["EnvironmentVariables"]["GME_DETECTOR_IDENTITY"] == BETA_V4_IDENTITY
+    assert plist["EnvironmentVariables"]["GME_MODEL_VERSION"] == "v2.6.1-beta-v4-s27"
+    for key, value in {"GME_SCORE_THRESHOLD": "0.80", "GME_DETECTOR_IDENTITY": BETA_V3_IDENTITY,
+                       "GME_CHECKPOINT_SHA256": BETA_V3_SHA, "GME_DETECTOR_FREEZE_SHA256": BETA_V3_FREEZE_SHA,
+                       "GME_ALGORITHM_VERSION": "gme-motion-v1"}.items():
         result, bad_home = _run(tmp_path / f"bad-{key}", {**env, key: value})
         assert result.returncode != 0, key
         assert not list(bad_home.rglob("*.plist"))

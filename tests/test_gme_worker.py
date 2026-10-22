@@ -20,6 +20,9 @@ BETA_V2_IDENTITY = "8968c0546e4a86486eb56fb1ab89939da9aedabe3306131ffe8f052669ee
 BETA_V3_SHA = "f1046788e179f40e0e8a72af650848af3fa7b934c08e54e28a77930dccc0fb5e"
 BETA_V3_FREEZE_SHA = "430c7f0485acd406fb8415603e8a135ab67213bb0a101cbb6bab0127fd5bd57c"
 BETA_V3_IDENTITY = "83a36f6378aebc6e911deebc003d5307625703b33111babc2dd6d57dc502ff9e"
+BETA_V4_SHA = "42b33c349cefcdfd241138630d4b617c50d70a43571cde7dd497cfd97d5fb3ad"
+BETA_V4_FREEZE_SHA = "9836364febeeef3b468427dfe1411b32bdefb4181052a91e5e2d9c750e17f5c7"
+BETA_V4_IDENTITY = "66d13f99571feb8d850436b447cd7e78256076def145c6adaa4ec7c969e5e897"
 ALGORITHM_VERSION = "gme-motion-v1"
 V26_PROVENANCE = {
     "model_name": "yolo26n",
@@ -388,6 +391,28 @@ def test_beta_v3_contract_accepts_only_frozen_model_tuple(monkeypatch):
     import pytest
     for key, bad in (("GME_SCORE_THRESHOLD", .80), ("GME_CHECKPOINT_SHA256", BETA_V2_SHA),
                      ("GME_DETECTOR_IDENTITY", BETA_V2_IDENTITY), ("GME_ALGORITHM_VERSION", "gme-motion-v1")):
+        monkeypatch.setattr(worker.config, key, bad)
+        with pytest.raises(ValueError, match=key):
+            worker._validated_v26_engine_config()
+        monkeypatch.setattr(worker.config, key, values[key])
+
+
+def test_beta_v4_contract_accepts_only_frozen_model_tuple(monkeypatch):
+    values = _v261_values(
+        GME_ALGORITHM_VERSION="gme-motion-v2",
+        GME_MODEL_VERSION="v2.6.1-beta-v4-s27",
+        GME_CHECKPOINT_SHA256=BETA_V4_SHA,
+        GME_DETECTOR_FREEZE_SHA256=BETA_V4_FREEZE_SHA,
+        GME_DETECTOR_IDENTITY=BETA_V4_IDENTITY,
+        GME_SCORE_THRESHOLD=.70,
+    )
+    for key, value in values.items():
+        monkeypatch.setattr(worker.config, key, value)
+    assert worker._validated_v26_engine_config().analysis_fps == 10.0
+    import pytest
+    for key, bad in (("GME_SCORE_THRESHOLD", .80), ("GME_CHECKPOINT_SHA256", BETA_V3_SHA),
+                     ("GME_DETECTOR_IDENTITY", BETA_V3_IDENTITY), ("GME_DETECTOR_FREEZE_SHA256", BETA_V3_FREEZE_SHA),
+                     ("GME_ALGORITHM_VERSION", "gme-motion-v1")):
         monkeypatch.setattr(worker.config, key, bad)
         with pytest.raises(ValueError, match=key):
             worker._validated_v26_engine_config()

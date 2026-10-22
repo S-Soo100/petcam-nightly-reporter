@@ -66,6 +66,11 @@ case "$MODEL_VERSION" in
     APPROVED_FREEZE="430c7f0485acd406fb8415603e8a135ab67213bb0a101cbb6bab0127fd5bd57c"
     APPROVED_IDENTITY="83a36f6378aebc6e911deebc003d5307625703b33111babc2dd6d57dc502ff9e"
     APPROVED_THRESHOLD="0.70" ;;
+  v2.6.1-beta-v4-s27)
+    APPROVED_SHA="42b33c349cefcdfd241138630d4b617c50d70a43571cde7dd497cfd97d5fb3ad"
+    APPROVED_FREEZE="9836364febeeef3b468427dfe1411b32bdefb4181052a91e5e2d9c750e17f5c7"
+    APPROVED_IDENTITY="66d13f99571feb8d850436b447cd7e78256076def145c6adaa4ec7c969e5e897"
+    APPROVED_THRESHOLD="0.70" ;;
   *) echo "unapproved GME model version" >&2; exit 1 ;;
 esac
 [ "$CHECKPOINT_SHA256" = "$APPROVED_SHA" ] && [ "$DETECTOR_FREEZE_SHA256" = "$APPROVED_FREEZE" ] && [ "$DETECTOR_IDENTITY" = "$APPROVED_IDENTITY" ] && [ "$SCORE_THRESHOLD" = "$APPROVED_THRESHOLD" ] || { echo "GME model contract mismatch" >&2; exit 1; }
@@ -86,6 +91,10 @@ case "$ALGORITHM_VERSION" in gme-motion-v1|gme-motion-v2) ;; *) echo "unapproved
 }
 [ "$MODEL_VERSION" != "v2.6.1-beta-v3-s27" ] || [ "$ALGORITHM_VERSION" = "gme-motion-v2" ] || {
   echo "beta v3 requires gme-motion-v2" >&2
+  exit 1
+}
+[ "$MODEL_VERSION" != "v2.6.1-beta-v4-s27" ] || [ "$ALGORITHM_VERSION" = "gme-motion-v2" ] || {
+  echo "beta v4 requires gme-motion-v2" >&2
   exit 1
 }
 case "$LABEL:$ALLOWED_SOURCES" in
